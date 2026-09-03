@@ -1,0 +1,45 @@
+name: NFBC Holdem Projection Update
+
+on:
+  schedule:
+    # Once daily is plenty — team ratings and player roles don't shift hourly.
+    # 13:00 UTC = 9am ET.
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+    inputs:
+      season:
+        description: 'Season year, e.g. 2026'
+        required: true
+        default: '2026'
+      contenders_only:
+        description: 'Only project top-half teams (faster run)?'
+        required: false
+        default: 'false'
+
+jobs:
+  update-projections:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run projection pipeline
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: |
+          SEASON="${{ github.event.inputs.season }}"
+          if [ -z "$SEASON" ]; then SEASON=$(date -u +%Y); fi
+          EXTRA_FLAGS=""
+          if [ "${{ github.event.inputs.contenders_only }}" = "true" ]; then
+            EXTRA_FLAGS="--contenders-only"
+          fi
+          python run_projections.py --season "$SEASON" --push-firestore $EXTRA_FLAGS

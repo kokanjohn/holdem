@@ -1,0 +1,63 @@
+name: NFBC Holdem Daily Stat Pull
+
+on:
+  schedule:
+    # Postseason games typically finish late — pull "yesterday" twice to be safe:
+    # 09:00 UTC = 5am ET (catches games that ended the previous night)
+    - cron: '0 9 * * *'
+    # 15:00 UTC = 11am ET (safety net / catches anything delayed into early morning)
+    - cron: '0 15 * * *'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Date to pull (YYYY-MM-DD). Leave blank to pull yesterday (UTC).'
+        required: false
+      include_unfinished:
+        description: 'Include in-progress games (partial stats)?'
+        required: false
+        default: 'false'
+
+jobs:
+  pull-stats:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Determine target date
+        id: target_date
+        run: |
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            echo "date=${{ github.event.inputs.date }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "date=$(date -u -d 'yesterday' +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run daily pull and push to Firestore
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          EXTRA_FLAGS=""
+          if [ "${{ github.event.inputs.include_unfinished }}" = "true" ]; then
+            EXTRA_FLAGS="--include-unfinished"
+          fi
+          python scripts/nfbc_holdem_scoring.py \
+            --date "${{ steps.target_date.outputs.date }}" \
+            --push-firestore \
+            --out "results_${{ steps.target_date.outputs.date }}.csv" \
+            $EXTRA_FLAGS
+
+      - name: Upload CSV as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfbc-results-${{ steps.target_date.outputs.date }}
+          path: results_${{ steps.target_date.outputs.date }}.csv
+          retention-days: 90
