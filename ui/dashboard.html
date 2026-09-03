@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Holdem Control Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#0B0F14;
+    --surface:#121922;
+    --surface-2:#1A222D;
+    --surface-hover:#212C39;
+    --border:#26313D;
+    --border-soft:#1D2731;
+    --text:#E7EDF3;
+    --text-dim:#8394A5;
+    --text-faint:#5C6B7A;
+    --accent:#F2A93B;
+
+    --heat-0:#242A6B; --heat-1:#1C6E8C; --heat-2:#1E9B7E;
+    --heat-3:#8CB93B; --heat-4:#E8B93B; --heat-5:#E8792E; --heat-6:#D6303B;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%; margin:0; overflow:hidden;}
+  body{
+    background:
+      radial-gradient(ellipse 1100px 550px at 12% -10%, rgba(242,169,59,0.06), transparent 60%),
+      radial-gradient(ellipse 900px 500px at 100% 0%, rgba(28,110,140,0.10), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Space Grotesk', system-ui, sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:'IBM Plex Mono', 'SF Mono', Consolas, monospace; font-variant-numeric:tabular-nums;}
+  a{color:inherit; text-decoration:none;}
+  button{font-family:inherit;}
+
+  /* ---------- app shell (fills viewport, no page scroll) ---------- */
+  .app{
+    height:100vh; max-width:1900px; margin:0 auto;
+    padding:0 36px 18px;
+    display:flex; flex-direction:column;
+  }
+
+  header.top{
+    flex:0 0 auto;
+    display:flex; align-items:flex-start; justify-content:space-between;
+    gap:24px; flex-wrap:wrap;
+    padding:22px 0 16px;
+    border-bottom:1px solid var(--border-soft);
+    animation:riseIn .5s ease both;
+  }
+  .brand{display:flex; align-items:center; gap:18px;}
+  .brand h1{font-size:24px; font-weight:700; margin:0; letter-spacing:-0.01em;}
+  .brand p{margin:2px 0 0; color:var(--text-dim); font-size:13.5px; max-width:50ch;}
+
+  .nav-link{
+    display:inline-flex; align-items:center; gap:7px;
+    background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim);
+    padding:8px 14px; border-radius:8px; font-size:13px; transition:background .15s, color .15s;
+    white-space:nowrap;
+  }
+  .nav-link:hover{background:var(--surface-hover); color:var(--text);}
+
+  .status-block{display:flex; flex-direction:column; align-items:flex-end; gap:8px;}
+  .status-row{display:flex; align-items:center; gap:10px;}
+  .status-pill{
+    display:flex; align-items:center; gap:8px;
+    background:var(--surface); border:1px solid var(--border);
+    padding:7px 12px 7px 10px; border-radius:7px; font-size:13px; color:var(--text-dim);
+  }
+  .live-dot{
+    width:7px; height:7px; border-radius:50%; background:var(--accent);
+    box-shadow:0 0 0 3px rgba(242,169,59,0.18); animation:pulse 2.4s ease-in-out infinite; flex-shrink:0;
+  }
+  .status-pill strong{color:var(--text); font-weight:600;}
+  .sample-flag{
+    font-size:11.5px; color:#E8B93B; background:rgba(232,185,59,0.10);
+    border:1px solid rgba(232,185,59,0.28); padding:4px 9px; border-radius:6px;
+  }
+
+  /* ---------- tabs ---------- */
+  .tabbar{flex:0 0 auto; display:flex; gap:6px; padding:14px 0 12px;}
+  .tab-btn{
+    background:transparent; border:1px solid transparent; color:var(--text-faint);
+    padding:8px 4px; font-size:14.5px; cursor:pointer; position:relative;
+    margin-right:22px;
+  }
+  .tab-btn:hover{color:var(--text-dim);}
+  .tab-btn.active{color:var(--text); font-weight:600;}
+  .tab-btn.active::after{
+    content:''; position:absolute; left:0; right:0; bottom:-13px; height:2px; background:var(--accent);
+  }
+
+  .tab-content{flex:1 1 auto; min-height:0; position:relative;}
+  .tab-panel{display:none; flex-direction:column; height:100%; min-height:0;}
+  .tab-panel.active{display:flex;}
+  section.pane{display:flex; flex-direction:column; height:100%; min-height:0; animation:riseIn .45s ease both;}
+
+  .section-head{
+    flex:0 0 auto;
+    display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap;
+    gap:12px; margin-bottom:12px;
+  }
+  .section-head h2{font-size:17px; font-weight:600; margin:0;}
+  .section-head .sub{font-size:12.5px; color:var(--text-dim); margin-top:3px;}
+
+  .panel{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; flex:1; min-height:0; display:flex; flex-direction:column;
+  }
+  .panel-caption{
+    flex:0 0 auto; font-size:12px; color:var(--text-faint); margin-bottom:12px;
+    padding-bottom:11px; border-bottom:1px solid var(--border-soft);
+  }
+  .panel-caption em{color:var(--text-dim); font-style:normal; font-weight:600;}
+
+  .board-movement-layout{display:flex; gap:18px; flex:1; min-height:0;}
+  .board-panel{flex:1.35; min-height:0;}
+  .movement-panel{flex:1; min-height:0;}
+  .panel-scroll{flex:1; min-height:0; overflow-y:auto;}
+  .panel-scroll::-webkit-scrollbar{width:9px;}
+  .panel-scroll::-webkit-scrollbar-thumb{background:var(--surface-2); border-radius:5px; border:2px solid var(--surface);}
+  .panel-scroll::-webkit-scrollbar-track{background:transparent;}
+
+  /* ---------- controls ---------- */
+  .chip-row{display:flex; gap:8px; flex-wrap:wrap;}
+  .chip{
+    border:1px solid var(--border); background:var(--surface-2); color:var(--text-dim);
+    font-size:13px; padding:6px 12px; border-radius:999px; cursor:pointer;
+    transition:background .15s, color .15s, border-color .15s; user-select:none;
+  }
+  .chip:hover{background:var(--surface-hover); color:var(--text);}
+  .chip.active{background:rgba(242,169,59,0.14); border-color:rgba(242,169,59,0.5); color:var(--accent);}
+
+  .search-input{
+    width:100%; max-width:300px;
+    background:var(--surface-2); border:1px solid var(--border); color:var(--text);
+    padding:9px 12px; border-radius:7px; font-size:13.5px; font-family:inherit; outline:none;
+  }
+  .search-input:focus{border-color:rgba(242,169,59,0.5);}
+  .search-input::placeholder{color:var(--text-faint);}
+  select.mini-select{
+    background:var(--surface-2); border:1px solid var(--border); color:var(--text);
+    padding:8px 10px; border-radius:7px; font-size:13px; font-family:inherit; outline:none; cursor:pointer;
+  }
+
+  /* ---------- survival board table ---------- */
+  table.board{width:100%; border-collapse:collapse; font-size:13.5px;}
+  table.board thead th{
+    text-align:left; font-weight:500; color:var(--text-faint); font-size:12px;
+    padding:0 10px 10px; border-bottom:1px solid var(--border-soft);
+    position:sticky; top:0; background:var(--surface); z-index:1;
+  }
+  table.board thead th.num{text-align:right;}
+  table.board thead th.sortable{cursor:pointer; user-select:none;}
+  table.board thead th.sortable:hover{color:var(--text-dim);}
+  table.board thead th.sort-active{color:var(--accent);}
+  table.board tbody tr{border-bottom:1px solid var(--border-soft); transition:background .12s;}
+  table.board tbody tr:hover{background:var(--surface-hover);}
+  table.board tbody tr:last-child{border-bottom:none;}
+  table.board td{padding:11px 10px; vertical-align:middle;}
+  table.board td.num{text-align:right;}
+
+  .team-cell{display:flex; align-items:center; gap:10px;}
+  .team-swatch{width:8px; height:28px; border-radius:3px; flex-shrink:0;}
+  .team-name{font-weight:600; font-size:14px;}
+  .team-meta{color:var(--text-faint); font-size:11.5px;}
+
+  .heat-cell{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:58px; padding:4px 9px; border-radius:6px; font-size:13px; font-weight:600;
+  }
+  .round-tag{
+    font-size:11.5px; color:var(--text-dim); background:var(--surface-2);
+    border:1px solid var(--border); padding:3px 8px; border-radius:5px;
+  }
+  .next-game{font-size:11px; color:var(--text-faint); margin-top:5px;}
+  .mm-badge{
+    display:inline-block; font-size:10.5px; margin-top:5px; padding:2px 6px; border-radius:4px;
+    cursor:help; white-space:nowrap;
+  }
+  .mm-badge.up{color:#3FD98A; background:rgba(63,217,138,0.1);}
+  .mm-badge.down{color:#E2495A; background:rgba(226,73,90,0.1);}
+
+  .recent-scores-row{flex:0 0 auto; display:flex; gap:10px; overflow-x:auto; padding-bottom:14px;}
+  .score-card{
+    flex:0 0 auto; min-width:172px; background:var(--surface); border:1px solid var(--border);
+    border-radius:8px; padding:9px 12px; cursor:help;
+  }
+  .score-card-date{font-size:10.5px; color:var(--text-faint); margin-bottom:3px;}
+  .score-card-line{font-family:'IBM Plex Mono', monospace; font-size:13.5px; color:var(--text-dim); display:flex; gap:6px; align-items:baseline;}
+  .score-card-line .won{color:var(--text); font-weight:600;}
+  .score-card-at{color:var(--text-faint); font-size:11px;}
+  .score-card-impact{font-size:10.5px; color:var(--text-faint); margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .il-badge{
+    font-size:10.5px; font-weight:600; color:#F3F6FA; background:#8A2432;
+    padding:2px 7px; border-radius:5px; margin-left:8px; white-space:nowrap;
+  }
+  .tier-pill{
+    display:inline-block; font-size:12px; font-weight:600; padding:3px 10px;
+    border-radius:5px; color:#0B0F14;
+  }
+  .fallback-mark{color:var(--text-faint); font-size:11px; margin-left:4px; cursor:help;}
+  .filter-bar{
+    flex:0 0 auto; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    margin-bottom:14px;
+  }
+  .movers-row{flex:0 0 auto; display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;}
+  .mover-pill{
+    display:inline-flex; align-items:center; gap:6px; font-size:12px;
+    padding:5px 10px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2);
+    cursor:pointer;
+  }
+  .mover-pill:hover{background:var(--surface-hover);}
+  .mover-pill.up{color:#3FD98A;}
+  .mover-pill.down{color:#E2495A;}
+  .conf-dots{display:inline-flex; gap:3px; cursor:help;}
+  .conf-dots span{width:6px; height:6px; border-radius:50%; background:var(--border);}
+  .conf-dots span.on{background:var(--accent);}
+  .bullpen-flag{
+    font-size:10.5px; padding:2px 7px; border-radius:4px; margin-left:6px; cursor:help; white-space:nowrap;
+  }
+  .bullpen-flag.clear{color:#3FD98A; background:rgba(63,217,138,0.1);}
+  .bullpen-flag.committee{color:#E8B93B; background:rgba(232,185,59,0.1);}
+  .trend-arrow{display:inline-flex; align-items:center; gap:4px; font-size:12.5px; font-weight:600;}
+  .trend-arrow.up{color:#3FD98A;}
+  .trend-arrow.down{color:#E2495A;}
+  .trend-arrow.flat{color:var(--text-faint);}
+  .sparkline{display:block;}
+
+  /* ---------- trend tab (dependency-free SVG chart) ---------- */
+  .trend-chart-wrap{flex:1; min-height:0; display:flex;}
+  .trend-legend-row{
+    flex:0 0 auto; display:flex; flex-wrap:wrap; gap:6px; padding-top:12px;
+    margin-top:12px; border-top:1px solid var(--border-soft);
+  }
+  .legend-item{
+    display:inline-flex; align-items:center; gap:7px; padding:5px 10px; border-radius:999px;
+    cursor:pointer; font-size:12.5px; border:1px solid var(--border); background:var(--surface-2);
+  }
+  .legend-item:hover{background:var(--surface-hover);}
+  .legend-item.off{opacity:.35;}
+  .legend-dot{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
+  .legend-val{color:var(--text-dim); font-size:11.5px;}
+
+  /* ---------- player targets ---------- */
+  .team-target-group{margin-bottom:16px;}
+  .team-target-group:last-child{margin-bottom:0;}
+  .ttg-head{display:flex; align-items:center; gap:10px; padding:8px 4px;}
+  .ttg-head .team-swatch{height:20px;}
+  .ttg-head h3{font-size:15px; font-weight:600; margin:0;}
+  .ttg-head .count{color:var(--text-faint); font-size:12.5px; margin-left:2px;}
+
+  .player-grid{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));
+    gap:10px; padding:2px 4px 4px;
+  }
+  .player-card{
+    background:var(--surface-2); border:1px solid var(--border); border-radius:9px; padding:12px 13px;
+  }
+  .pc-top{display:flex; align-items:flex-start; justify-content:space-between; gap:8px;}
+  .pc-name{font-weight:600; font-size:14px; line-height:1.25;}
+  .pc-pos{color:var(--text-faint); font-size:11.5px; margin-top:2px;}
+  .tier-badge{
+    font-size:11px; font-weight:600; padding:3px 8px; border-radius:5px; color:#0B0F14;
+    white-space:nowrap; flex-shrink:0;
+  }
+  .pc-stats{display:flex; gap:14px; margin-top:10px; font-size:12.5px; color:var(--text-dim);}
+  .pc-stats b{color:var(--text); font-weight:600;}
+  .pc-note{margin-top:8px; font-size:11.5px; color:#E8B93B; display:flex; align-items:center; gap:5px;}
+
+  @keyframes riseIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(242,169,59,0.18);} 50%{box-shadow:0 0 0 6px rgba(242,169,59,0.06);}}
+
+  @media (max-width:900px){
+    html,body{overflow:auto;}
+    .app{height:auto; padding:0 18px 24px;}
+    .tab-content{min-height:600px;}
+    .board-movement-layout{flex-direction:column;}
+    .board-panel, .movement-panel{min-height:340px;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div class="brand">
+      <div>
+        <h1>Holdem Control Room</h1>
+        <p>Team survival tracking and player targets for NFBC Postseason Holdem.</p>
+      </div>
+    </div>
+    <div class="status-block">
+      <div class="status-row">
+        <a class="nav-link" href="draft-room.html">🎯 Draft war room</a>
+        <div class="status-pill">
+          <span class="live-dot"></span>
+          <span>Updated <strong id="updatedAt">—</strong></span>
+        </div>
+      </div>
+      <span class="sample-flag" id="sampleFlag">Sample data — not yet connected to Firestore</span>
+    </div>
+  </header>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tab-btn active" data-tab="board">Survival board</button>
+    <button class="tab-btn" data-tab="targets">Player targets</button>
+  </nav>
+
+  <div class="tab-content">
+
+    <!-- ============ SURVIVAL BOARD + MOVEMENT (merged) ============ -->
+    <div class="tab-panel active" id="tab-board">
+      <section class="pane">
+        <div class="section-head">
+          <div>
+            <h2>Team survival board</h2>
+            <div class="sub">Pythagorean rating, market World Series odds, and current-round advancement probability.</div>
+          </div>
+          <div class="chip-row" id="leagueFilter">
+            <span class="chip active" data-league="ALL">All</span>
+            <span class="chip" data-league="AL">AL</span>
+            <span class="chip" data-league="NL">NL</span>
+          </div>
+        </div>
+        <div class="recent-scores-row" id="recentScores"></div>
+        <div class="board-movement-layout">
+          <div class="panel board-panel">
+            <div class="panel-caption">Exact numbers per team — the trend column shows direction only, not magnitude (each row is scaled to itself).</div>
+            <div class="panel-scroll">
+              <table class="board">
+                <thead>
+                  <tr>
+                    <th>Team</th>
+                    <th class="num">Pythag win%</th>
+                    <th class="num">Market WS odds</th>
+                    <th>Current round</th>
+                    <th class="num">Advance prob.</th>
+                    <th class="num">14-day trend</th>
+                  </tr>
+                </thead>
+                <tbody id="boardBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel movement-panel">
+            <div class="panel-caption">Same data, one shared scale — use this to compare <em>how much</em> teams moved, not just which direction.</div>
+            <div class="trend-chart-wrap" id="trendChartWrap"></div>
+            <div class="trend-legend-row" id="trendLegend"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============ PLAYER TARGETS ============ -->
+    <div class="tab-panel" id="tab-targets">
+      <section class="pane">
+        <div class="section-head">
+          <div>
+            <h2>Player targets</h2>
+            <div class="sub">Sorted by projected value. Click a column header to re-sort.</div>
+          </div>
+          <input type="text" class="search-input" id="playerSearch" placeholder="Search player or team…">
+        </div>
+        <div class="movers-row" id="moversRow"></div>
+        <div class="filter-bar">
+          <div class="chip-row" id="typeFilter">
+            <span class="chip active" data-type="ALL">All</span>
+            <span class="chip" data-type="hitter">Hitters</span>
+            <span class="chip" data-type="pitcher">Pitchers</span>
+          </div>
+          <select class="mini-select" id="teamFilterSelect"><option value="ALL">All teams</option></select>
+          <select class="mini-select" id="posFilterSelect"><option value="ALL">All positions</option></select>
+          <select class="mini-select" id="tierFilter">
+            <option value="ALL">All tiers</option>
+            <option value="Elite">Elite only</option>
+            <option value="Strong">Strong+</option>
+          </select>
+        </div>
+        <div class="panel">
+          <div class="panel-scroll">
+            <table class="board" id="targetsTable">
+              <thead>
+                <tr>
+                  <th data-sort="rate" class="sortable" title="Projected fantasy points per PA or IP">Value</th>
+                  <th title="3-day movement in projected value">Trend</th>
+                  <th data-sort="name" class="sortable">Player</th>
+                  <th data-sort="team" class="sortable">Team</th>
+                  <th data-sort="pos" class="sortable" title="Site position eligibility — see position_eligibility.py">Position</th>
+                  <th data-sort="role" class="sortable">Role</th>
+                  <th data-sort="tier" class="sortable">Tier</th>
+                  <th data-sort="confidence" class="sortable" title="How much this projection leans on a thin/uncertain sample, separate from the tier itself">Conf.</th>
+                </tr>
+              </thead>
+              <tbody id="targetsBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel-caption" style="flex:0 0 auto; margin-top:10px; margin-bottom:0; border:none; padding:0;">
+          Bullpen role (Clear/Committee) is computed from each pitcher's share of his team's saves — updates automatically as usage patterns shift, no manual lookup needed.
+        </div>
+      </section>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   FIREBASE CONFIG — paste your web app config here (Firebase console →
+   Project settings → General → Your apps → the </> web app). This is safe
+   to expose publicly; access is controlled by Firestore security rules,
+   not by hiding this object. Leave the placeholder values as-is and the
+   dashboard runs on sample data automatically.
+   ===================================================================== */
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID",
+};
+
+function isFirebaseConfigured(){
+  return firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY";
+}
+
+let firestoreDb = null;
+if(isFirebaseConfigured() && window.firebase){
+  firebase.initializeApp(firebaseConfig);
+  firestoreDb = firebase.firestore();
+}
+
+/* MLB Stats API team IDs don't come with a color/abbreviation — this is a
+   static lookup since real MLB team IDs/colors/abbreviations essentially
+   never change. Not sourced from Firestore; just local reference data. */
+const MLB_TEAM_META = {
+  108:{abbr:'LAA',color:'#BA0021'}, 109:{abbr:'ARI',color:'#A71930'}, 110:{abbr:'BAL',color:'#DF4601'},
+  111:{abbr:'BOS',color:'#BD3039'}, 112:{abbr:'CHC',color:'#0E3386'}, 113:{abbr:'CIN',color:'#C6011F'},
+  114:{abbr:'CLE',color:'#0C2340'}, 115:{abbr:'COL',color:'#33006F'}, 116:{abbr:'DET',color:'#0C2340'},
+  117:{abbr:'HOU',color:'#EB6E1F'}, 118:{abbr:'KC', color:'#004687'}, 119:{abbr:'LAD',color:'#3E6DE0'},
+  120:{abbr:'WSH',color:'#AB0003'}, 121:{abbr:'NYM',color:'#FF5910'}, 133:{abbr:'ATH',color:'#003831'},
+  134:{abbr:'PIT',color:'#FDB827'}, 135:{abbr:'SD', color:'#2F241D'}, 136:{abbr:'SEA',color:'#0C2C56'},
+  137:{abbr:'SF', color:'#FD5A1E'}, 138:{abbr:'STL',color:'#C41E3A'}, 139:{abbr:'TB', color:'#092C5C'},
+  140:{abbr:'TEX',color:'#003278'}, 141:{abbr:'TOR',color:'#134A8E'}, 142:{abbr:'MIN',color:'#002B5C'},
+  143:{abbr:'PHI',color:'#E81828'}, 144:{abbr:'ATL',color:'#CE1141'}, 145:{abbr:'CWS',color:'#27251F'},
+  146:{abbr:'MIA',color:'#00A3E0'}, 147:{abbr:'NYY',color:'#C4CED4'}, 158:{abbr:'MIL',color:'#12284B'},
+};
+function teamMeta(teamId){ return MLB_TEAM_META[teamId] || {abbr:'???', color:'#5C6B7A'}; }
+
+/* =====================================================================
+   DATA LAYER — reads the Firestore collections the pipeline writes.
+   Falls back to sample data if Firebase isn't configured yet, the
+   collections are empty (pipeline hasn't run), or a read fails for any
+   reason — the dashboard should never show a blank screen.
+   ===================================================================== */
+
+function tierFromRate(rate, unit){
+  // NOTE: threshold-based placeholder, not a full-pool percentile rank.
+  // A more rigorous version would compute percentile tiers in the pipeline
+  // itself (across the whole projected slate) and store the tier directly
+  // on the record — worth doing once there's a full slate to rank against.
+  if(rate == null) return 'Watch';
+  const cuts = unit === 'PA' ? [0.95, 0.80, 0.65] : [1.15, 0.95, 0.75];
+  if(rate >= cuts[0]) return 'Elite';
+  if(rate >= cuts[1]) return 'Strong';
+  if(rate >= cuts[2]) return 'Solid';
+  return 'Watch';
+}
+
+function deriveConfidence(d){
+  if(d.milbPA || d.milbIP) return {c:'Low', r:'Thin MLB sample — projection leans on translated MiLB stats'};
+  if(d.available === false) return {c:'Low', r:d.statusNote ? `Unavailable (${d.statusNote})` : 'Unavailable'};
+  if(d.role === 'platoon') return {c:'Medium', r:'Part-time role — usage could shift'};
+  if(d.positionEligibilityFallback) return {c:'Medium', r:'Position eligibility used a fallback rule, not a clean games-played threshold'};
+  return {c:'High', r:'Full-time role, established MLB sample'};
+}
+
+async function loadData(){
+  if(!firestoreDb){
+    console.info('Firebase not configured — showing sample data. Paste your firebaseConfig near the top of the script to go live.');
+    return {...sampleData(), isSample: true};
+  }
+  try {
+    const [ratingsSnap, roundsSnap, playersSnap, ratingHistSnap, playerHistSnap, metaSnap] = await Promise.all([
+      firestoreDb.collection('team_power_ratings').get(),
+      firestoreDb.collection('team_round_probabilities').get(),
+      firestoreDb.collection('player_projections').get(),
+      firestoreDb.collection('team_rating_history').get(),
+      firestoreDb.collection('player_projection_history').get(),
+      firestoreDb.collection('system_meta').doc('last_run').get(),
+    ]);
+
+    if(ratingsSnap.empty){
+      console.warn('Firestore connected but team_power_ratings is empty — has the pipeline run yet? Showing sample data.');
+      return {...sampleData(), isSample: true};
+    }
+
+    const ratingHistByTeam = {};
+    ratingHistSnap.forEach(doc => { const d = doc.data(); (ratingHistByTeam[d.teamId] ||= []).push(d); });
+    Object.values(ratingHistByTeam).forEach(arr => arr.sort((a,b) => a.date.localeCompare(b.date)));
+
+    const roundsByTeam = {};
+    roundsSnap.forEach(doc => { const d = doc.data(); roundsByTeam[d.teamId] = d; });
+
+    const teams = [];
+    ratingsSnap.forEach(doc => {
+      const d = doc.data();
+      const meta = teamMeta(d.teamId);
+      const hist = ratingHistByTeam[d.teamId] || [];
+      const round = roundsByTeam[d.teamId];
+      teams.push({
+        id: d.teamId, name: d.teamName, abbr: meta.abbr, color: meta.color,
+        league: d.league, division: d.division,
+        pythag: d.pythagoreanWinPct, marketWS: d.marketWSOdds || 0,
+        round: round ? round.currentRound : null,
+        advance: round ? round.advanceCurrentRoundProb : null,
+        modelProb: round ? round.modelGameProb : null,
+        marketProb: round ? round.marketGameProb : null,
+        trend: hist.length >= 2 ? hist.map(h => h.marketWSOdds || 0) : [d.marketWSOdds || 0, d.marketWSOdds || 0],
+      });
+    });
+
+    const playerHistByPlayer = {};
+    playerHistSnap.forEach(doc => { const d = doc.data(); (playerHistByPlayer[d.playerId] ||= []).push(d); });
+    Object.values(playerHistByPlayer).forEach(arr => arr.sort((a,b) => a.date.localeCompare(b.date)));
+
+    const players = [];
+    playersSnap.forEach(doc => {
+      const d = doc.data();
+      const isHitter = d.pointsPerPA != null;
+      const rate = isHitter ? d.pointsPerPA : d.pointsPerIP;
+      const unit = isHitter ? 'PA' : 'IP';
+      const hist = playerHistByPlayer[d.playerId] || [];
+      const conf = deriveConfidence(d);
+
+      let bullpenFlag, bullpenReason;
+      if(d.saveSignalSource){
+        bullpenReason = d.saveSignalSource;
+        if(d.saveSignalSource.startsWith('trailing')){
+          bullpenFlag = d.saveSignal >= 0.5 ? 'Clear' : 'Committee';
+        }
+      }
+
+      let note;
+      if(d.milbPA || d.milbIP) note = `Thin MLB sample (${d.milbPA || d.milbIP} MiLB ${isHitter ? 'PA' : 'IP'} informing this projection)`;
+      else if(d.positionEligibilityFallback) note = 'Position eligibility used a fallback rule';
+
+      players.push({
+        team: d.teamId, name: d.player, pos: d.eligiblePositionsDisplay || d.rosterPosition,
+        role: d.role, rate: rate || 0, unit,
+        tier: tierFromRate(rate, unit),
+        confidence: conf.c, confidenceReason: conf.r,
+        status: d.statusNote, note,
+        bullpenFlag, bullpenReason,
+        type: isHitter ? 'hitter' : 'pitcher',
+        trend: hist.length >= 2 ? hist.map(h => h.value || 0) : [rate || 0, rate || 0],
+      });
+    });
+
+    const meta = metaSnap.exists ? metaSnap.data() : null;
+    const generatedAt = (meta && meta.ranAt && meta.ranAt.toDate) ? meta.ranAt.toDate() : new Date();
+
+    // Not yet built into the pipeline — recent-scores requires correlating
+    // completed games (from the results scorer) with same-day odds
+    // movement, which is a separate aggregation step. Left empty rather
+    // than faked; the card row just won't render until that's built.
+    return {teams, players, recentScores: [], generatedAt, isSample: false};
+  } catch(err){
+    console.error('Firestore read failed, falling back to sample data:', err);
+    return {...sampleData(), isSample: true};
+  }
+}
+
+function seedTrend(end, days, volatility){
+  let arr = [end], v = end;
+  for(let i=1;i<days;i++){
+    v = Math.max(0.01, Math.min(0.85, v + (Math.random()-0.52)*volatility));
+    arr.unshift(Number(v.toFixed(3)));
+  }
+  arr[arr.length-1] = end;
+  return arr;
+}
+
+function seedValueTrend(end, days, volatility){
+  // same idea as seedTrend but for player value (pts/PA or pts/IP), which
+  // isn't bounded to [0,1] — just kept positive and within a sane range
+  let arr = [end], v = end;
+  for(let i=1;i<days;i++){
+    v = Math.max(0.05, v + (Math.random()-0.52)*volatility);
+    arr.unshift(Number(v.toFixed(3)));
+  }
+  arr[arr.length-1] = end;
+  return arr;
+}
+
+function sampleData(){
+  const teams = [
+    {id:119, name:'Los Angeles Dodgers', abbr:'LAD', league:'NL', division:'NL West',  color:'#3E6DE0', pythag:0.624, marketWS:0.19, round:'Division Series', advance:0.63, modelProb:0.58, marketProb:0.55, nextGame:'vs SD · Oct 5, 9:08pm ET'},
+    {id:147, name:'New York Yankees',    abbr:'NYY', league:'AL', division:'AL East',  color:'#C4CED4', pythag:0.598, marketWS:0.15, round:'Division Series', advance:0.58, modelProb:0.54, marketProb:0.54, nextGame:'vs BAL · Oct 5, 7:38pm ET'},
+    {id:143, name:'Philadelphia Phillies',abbr:'PHI',league:'NL', division:'NL East',  color:'#E81828', pythag:0.586, marketWS:0.12, round:'Division Series', advance:0.55, modelProb:0.56, marketProb:0.50, nextGame:'vs ATL · Oct 4, 4:08pm ET'},
+    {id:117, name:'Houston Astros',      abbr:'HOU', league:'AL', division:'AL West',  color:'#EB6E1F', pythag:0.571, marketWS:0.10, round:'Division Series', advance:0.51, modelProb:0.51, marketProb:0.52, nextGame:'vs CLE · Oct 4, 8:08pm ET'},
+    {id:158, name:'Milwaukee Brewers',   abbr:'MIL', league:'NL', division:'NL Central',color:'#12284B', pythag:0.564, marketWS:0.08, round:'Division Series', advance:0.49, modelProb:0.53, marketProb:0.47, nextGame:'vs NYM · Oct 5, 2:08pm ET'},
+    {id:110, name:'Baltimore Orioles',   abbr:'BAL', league:'AL', division:'AL East',  color:'#DF4601', pythag:0.552, marketWS:0.07, round:'Division Series', advance:0.46, modelProb:0.46, marketProb:0.46, nextGame:'@ NYY · Oct 5, 7:38pm ET'},
+    {id:144, name:'Atlanta Braves',      abbr:'ATL', league:'NL', division:'NL East',  color:'#CE1141', pythag:0.541, marketWS:0.06, round:null, advance:null},
+    {id:121, name:'New York Mets',       abbr:'NYM', league:'NL', division:'NL East',  color:'#FF5910', pythag:0.533, marketWS:0.055,round:null, advance:null},
+    {id:114, name:'Cleveland Guardians', abbr:'CLE', league:'AL', division:'AL Central',color:'#0C2340', pythag:0.527, marketWS:0.045,round:null, advance:null},
+    {id:109, name:'Arizona Diamondbacks',abbr:'ARI', league:'NL', division:'NL West',  color:'#A71930', pythag:0.519, marketWS:0.04, round:null, advance:null},
+    {id:136, name:'Seattle Mariners',    abbr:'SEA', league:'AL', division:'AL West',  color:'#0C2C56', pythag:0.512, marketWS:0.035,round:null, advance:null},
+    {id:135, name:'San Diego Padres',    abbr:'SD',  league:'NL', division:'NL West',  color:'#2F241D', pythag:0.508, marketWS:0.03, round:null, advance:null},
+    {id:116, name:'Detroit Tigers',      abbr:'DET', league:'AL', division:'AL Central',color:'#0C2340', pythag:0.497, marketWS:0.025,round:null, advance:null},
+    {id:139, name:'Tampa Bay Rays',      abbr:'TB',  league:'AL', division:'AL East',  color:'#092C5C', pythag:0.489, marketWS:0.02, round:null, advance:null},
+  ];
+  teams.forEach(t => t.trend = seedTrend(t.marketWS, 14, 0.02));
+
+  // Sample "yesterday's" final scores among contending teams — just enough
+  // to show the shape. impact is a short human-written note tying the result
+  // to an odds move you'd see reflected in the trend/model above; it's not
+  // separately computed here, just illustrating what that note would say.
+  const recentScores = [
+    {away:'SD', home:'LAD', awayScore:2, homeScore:9, date:'Sep 2', impact:'NL West rivals — LAD +1.1pt WS odds since'},
+    {away:'BAL', home:'NYY', awayScore:6, homeScore:1, date:'Sep 2', impact:'AL East rivals — BAL +0.6pt, NYY flat'},
+    {away:'ATL', home:'PHI', awayScore:3, homeScore:8, date:'Sep 2', impact:'NL East rivals — PHI model gap vs. market widened'},
+    {away:'CLE', home:'HOU', awayScore:4, homeScore:3, date:'Sep 2', impact:'AL West/Central — HOU odds -0.4pt after narrow loss'},
+    {away:'MIL', home:'NYM', awayScore:5, homeScore:2, date:'Sep 2', impact:'Wild card jockeying — MIL +0.3pt'},
+  ];
+
+  const players = [
+    {team:119, name:'Shohei Ohtani',    pos:'UT', role:'everyday', rate:1.24, unit:'PA', tier:'Elite'},
+    {team:119, name:'Mookie Betts',     pos:'2B/OF', role:'everyday', rate:0.91, unit:'PA', tier:'Elite'},
+    {team:119, name:'Yoshinobu Yamamoto',pos:'SP',role:'SP',       rate:1.41, unit:'IP', tier:'Elite'},
+    {team:119, name:'Roki Sasaki',      pos:'SP', role:'SP',       rate:0.97, unit:'IP', tier:'Strong', note:'Thin MLB IP — MiLB-informed projection'},
+
+    {team:147, name:'Aaron Judge',      pos:'OF', role:'everyday', rate:1.18, unit:'PA', tier:'Elite'},
+    {team:147, name:'Gerrit Cole',      pos:'SP', role:'SP',       rate:1.19, unit:'IP', tier:'Strong'},
+    {team:147, name:'Luke Weaver',      pos:'RP', role:'RP-closer',rate:0.88, unit:'IP', tier:'Strong'},
+
+    {team:121, name:'Juan Soto',        pos:'OF', role:'everyday', rate:1.02, unit:'PA', tier:'Elite'},
+    {team:121, name:'Francisco Lindor', pos:'SS', role:'everyday', rate:0.89, unit:'PA', tier:'Elite'},
+
+    {team:143, name:'Bryce Harper',     pos:'1B', role:'everyday', rate:0.96, unit:'PA', tier:'Elite'},
+    {team:143, name:'Zack Wheeler',     pos:'SP', role:'SP',       rate:1.28, unit:'IP', tier:'Elite'},
+    {team:143, name:'Trea Turner',      pos:'SS', role:'everyday', rate:0.84, unit:'PA', tier:'Strong'},
+
+    {team:117, name:'Yordan Alvarez',   pos:'OF', role:'everyday', rate:1.05, unit:'PA', tier:'Elite'},
+    {team:117, name:'Framber Valdez',   pos:'SP', role:'SP',       rate:1.11, unit:'IP', tier:'Strong'},
+    {team:117, name:'Josh Hader',       pos:'RP', role:'IL',       rate:0.79, unit:'IP', tier:'Strong', status:'15-Day-IL', note:'Sample only — demonstrates the injury flag once wired to real status data'},
+
+    {team:158, name:'Jackson Chourio',  pos:'OF', role:'everyday', rate:0.88, unit:'PA', tier:'Strong'},
+    {team:158, name:'Freddy Peralta',   pos:'SP', role:'SP',       rate:1.02, unit:'IP', tier:'Strong'},
+    {team:158, name:'Jesus Made',       pos:'2B/SS', role:'platoon',  rate:0.71, unit:'PA', tier:'Watch', note:'September call-up — MiLB-informed projection'},
+
+    {team:110, name:'Gunnar Henderson', pos:'SS', role:'everyday', rate:0.99, unit:'PA', tier:'Elite'},
+    {team:110, name:'Jackson Holliday',  pos:'2B',  role:'everyday', rate:0.77, unit:'PA', tier:'Solid'},
+  ];
+
+  players.forEach(p => {
+    p.type = p.unit === 'IP' ? 'pitcher' : 'hitter';
+    p.trend = seedValueTrend(p.rate, 14, p.rate * 0.045);
+
+    // Confidence: derived from the same signals the pipeline already
+    // computes (MiLB-informed note, role stability) — not a new data source,
+    // just surfacing what's already known in one place.
+    if(p.note && p.note.includes('MiLB-informed')){
+      p.confidence = 'Low'; p.confidenceReason = 'Thin MLB sample — projection leans on translated MiLB stats';
+    } else if(p.role === 'IL'){
+      p.confidence = 'Low'; p.confidenceReason = 'Unavailable — return timeline uncertain';
+    } else if(p.role === 'platoon'){
+      p.confidence = 'Medium'; p.confidenceReason = 'Part-time role — usage could shift';
+    } else {
+      p.confidence = 'High'; p.confidenceReason = 'Full-time role, established MLB sample';
+    }
+  });
+
+  // Bullpen role clarity — sample-only demonstration of "clear closer" vs.
+  // "committee" (a real risk in this scoring format since saves = +4pts).
+  // Not pulled from any external tracker automatically; see the
+  // cross-reference link in the UI for that.
+  const bullpenNotes = {
+    'Luke Weaver': {flag:'Committee', reason:'Save opportunities have been split with multiple relievers recently'},
+    'Josh Hader':  {flag:'Clear',      reason:'Locked-in closer when healthy'},
+  };
+  players.forEach(p => {
+    if(p.role === 'RP-closer' || (p.pos === 'RP' && bullpenNotes[p.name])){
+      const bn = bullpenNotes[p.name] || {flag:'Clear', reason:'No committee signal detected'};
+      p.bullpenFlag = bn.flag; p.bullpenReason = bn.reason;
+    }
+  });
+
+  return {teams, players, recentScores, generatedAt: new Date()};
+}
+
+/* =====================================================================
+   RENDER HELPERS
+   ===================================================================== */
+const HEAT_STOPS = ['#242A6B','#1C6E8C','#1E9B7E','#8CB93B','#E8B93B','#E8792E','#D6303B'];
+
+function heatColor(p){
+  if(p == null || isNaN(p)) return '#2A3542';
+  const clamped = Math.max(0, Math.min(1, p));
+  const scaled = clamped * (HEAT_STOPS.length - 1);
+  const i = Math.floor(scaled);
+  const frac = scaled - i;
+  const c0 = hexToRgb(HEAT_STOPS[Math.min(i, HEAT_STOPS.length-1)]);
+  const c1 = hexToRgb(HEAT_STOPS[Math.min(i+1, HEAT_STOPS.length-1)]);
+  const r = Math.round(c0[0] + (c1[0]-c0[0])*frac);
+  const g = Math.round(c0[1] + (c1[1]-c0[1])*frac);
+  const b = Math.round(c0[2] + (c1[2]-c0[2])*frac);
+  return `rgb(${r},${g},${b})`;
+}
+function hexToRgb(hex){ const v = parseInt(hex.slice(1), 16); return [(v>>16)&255, (v>>8)&255, v&255]; }
+function textOnHeat(p){
+  if(p == null || isNaN(p)) return '#8394A5';
+  return p < 0.35 ? '#F3F6FA' : '#0B0F14';
+}
+
+function trendArrow(trend, lookback=3){
+  const last = trend[trend.length-1];
+  const prior = trend[Math.max(0, trend.length-1-lookback)];
+  const delta = last - prior;
+  const pctChange = prior ? delta / prior : 0;
+  if(pctChange > 0.02) return {dir:'up', symbol:'▲', delta};
+  if(pctChange < -0.02) return {dir:'down', symbol:'▼', delta};
+  return {dir:'flat', symbol:'–', delta};
+}
+
+function sparklineSVG(values, color){
+  const w = 120, h = 30, pad = 3;
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = (max - min) || 1;
+  const pts = values.map((v,i) => {
+    const x = pad + (i/(values.length-1)) * (w - pad*2);
+    const y = h - pad - ((v-min)/range) * (h - pad*2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const lastX = w - pad, lastY = h - pad - ((values[values.length-1]-min)/range)*(h-pad*2);
+  return `<svg class="sparkline" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="2.4" fill="${color}"/>
+  </svg>`;
+}
+
+/* Dependency-free multi-line trend chart. viewBox is fixed and the SVG
+   stretches to fill its flex container (no external charting library —
+   avoids the CDN load-order issue Chart.js hit in the artifact preview). */
+function trendChartSVG(teams){
+  const W = 1000, H = 460;
+  const padL = 46, padR = 16, padT = 16, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const days = 14;
+
+  const allVals = teams.flatMap(t => t.trend);
+  const maxVal = Math.max(0.05, ...allVals) * 1.15;
+
+  const x = i => padL + (i/(days-1)) * plotW;
+  const y = v => padT + plotH - (v/maxVal) * plotH;
+
+  const yTicks = 4;
+  let gridLines = '';
+  for(let i=0;i<=yTicks;i++){
+    const v = (maxVal/yTicks)*i;
+    const yy = y(v);
+    gridLines += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="#1D2731" stroke-width="1"/>`;
+    gridLines += `<text x="${padL-8}" y="${(yy+4).toFixed(1)}" text-anchor="end" fill="#5C6B7A" font-size="11" font-family="IBM Plex Mono, monospace">${(v*100).toFixed(0)}%</text>`;
+  }
+
+  let xLabels = '';
+  [0, 6, 13].forEach(i => {
+    const label = i === 13 ? 'Today' : `D-${13-i}`;
+    xLabels += `<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" fill="#5C6B7A" font-size="11" font-family="IBM Plex Mono, monospace">${label}</text>`;
+  });
+
+  let lines = '';
+  teams.forEach(t => {
+    const pts = t.trend.map((v,i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    const lastX = x(days-1), lastY = y(t.trend[days-1]);
+    lines += `<polyline points="${pts}" fill="none" stroke="${t.color}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    lines += `<circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="3.5" fill="${t.color}"/>`;
+    lines += `<text x="${(lastX+8).toFixed(1)}" y="${(lastY+4).toFixed(1)}" fill="${t.color}" font-size="11.5" font-weight="600" font-family="Space Grotesk">${t.abbr}</text>`;
+  });
+
+  return `<svg width="100%" height="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    ${gridLines}${xLabels}${lines}
+  </svg>`;
+}
+
+/* =====================================================================
+   STATE + RENDER
+   ===================================================================== */
+let DATA = null;
+let leagueFilterState = 'ALL';
+let trendVisible = new Set();
+
+function fmtPct(v){ return v == null ? '—' : (v*100).toFixed(1) + '%'; }
+
+function renderUpdatedAt(){
+  const d = DATA.generatedAt;
+  const opts = {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'};
+  document.getElementById('updatedAt').textContent = d.toLocaleString('en-US', opts) + ' ET';
+}
+
+function modelMarketBadge(t){
+  if(t.modelProb == null || t.marketProb == null) return '';
+  const diff = t.modelProb - t.marketProb;
+  if(Math.abs(diff) < 0.03) return '';
+  const bullish = diff > 0;
+  const title = `Model: ${(t.modelProb*100).toFixed(0)}% · Market: ${(t.marketProb*100).toFixed(0)}% per game — our model is more ${bullish?'bullish':'bearish'} than the market`;
+  return `<span class="mm-badge ${bullish?'up':'down'}" title="${title}">${bullish?'▲':'▼'} ${bullish?'model favors':'market favors'}</span>`;
+}
+
+function renderBoard(){
+  const tbody = document.getElementById('boardBody');
+  const rows = DATA.teams
+    .filter(t => leagueFilterState === 'ALL' || t.league === leagueFilterState)
+    .sort((a,b) => b.marketWS - a.marketWS);
+
+  tbody.innerHTML = rows.map(t => {
+    const wsNorm = t.marketWS / 0.22;
+    const heat = heatColor(wsNorm);
+    const advHeat = t.advance != null ? heatColor(t.advance) : null;
+    return `
+      <tr>
+        <td>
+          <div class="team-cell">
+            <div class="team-swatch" style="background:${t.color}"></div>
+            <div>
+              <div class="team-name">${t.name}</div>
+              <div class="team-meta">${t.division}</div>
+            </div>
+          </div>
+        </td>
+        <td class="num mono" title="Pythagorean win% — runs scored/allowed based true-talent estimate, more predictive than raw W-L">${(t.pythag*100).toFixed(1)}%</td>
+        <td class="num">
+          <span class="heat-cell mono" style="background:${heat}; color:${textOnHeat(wsNorm)}" title="De-vigged sportsbook World Series odds">${fmtPct(t.marketWS)}</span>
+        </td>
+        <td>
+          ${t.round ? `<span class="round-tag">${t.round}</span>` : `<span class="round-tag" style="opacity:.5">Pre-bracket</span>`}
+          ${t.nextGame ? `<div class="next-game" title="Next scheduled game">${t.nextGame}</div>` : ''}
+        </td>
+        <td class="num">
+          ${t.advance != null
+            ? `<span class="heat-cell mono" style="background:${advHeat}; color:${textOnHeat(t.advance)}" title="Blended model + market probability of winning the current round">${fmtPct(t.advance)}</span>`
+            : `<span class="mono" style="color:var(--text-faint)">—</span>`}
+          <div>${modelMarketBadge(t)}</div>
+        </td>
+        <td class="num">${sparklineSVG(t.trend, t.color)}</td>
+      </tr>`;
+  }).join('');
+}
+
+function renderRecentScores(){
+  const wrap = document.getElementById('recentScores');
+  if(!DATA.recentScores || DATA.recentScores.length === 0){ wrap.innerHTML = ''; return; }
+  wrap.innerHTML = DATA.recentScores.map(g => {
+    const awayWon = g.awayScore > g.homeScore;
+    return `
+      <div class="score-card" title="${g.impact}">
+        <div class="score-card-date">${g.date}</div>
+        <div class="score-card-line">
+          <span class="${awayWon ? 'won' : ''}">${g.away} ${g.awayScore}</span>
+          <span class="score-card-at">@</span>
+          <span class="${!awayWon ? 'won' : ''}">${g.home} ${g.homeScore}</span>
+        </div>
+        <div class="score-card-impact">${g.impact}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderTrendLegend(){
+  const legend = document.getElementById('trendLegend');
+  const top = [...DATA.teams].sort((a,b)=>b.marketWS-a.marketWS).slice(0,8);
+  if(trendVisible.size === 0){ top.slice(0,6).forEach(t => trendVisible.add(t.id)); }
+  legend.innerHTML = top.map(t => `
+    <div class="legend-item ${trendVisible.has(t.id)?'':'off'}" data-id="${t.id}">
+      <span class="legend-dot" style="background:${t.color}"></span>
+      <span>${t.abbr}</span>
+      <span class="legend-val mono">${fmtPct(t.marketWS)}</span>
+    </div>`).join('');
+  legend.querySelectorAll('.legend-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = Number(el.dataset.id);
+      trendVisible.has(id) ? trendVisible.delete(id) : trendVisible.add(id);
+      renderTrendLegend();
+      renderTrendChart();
+    });
+  });
+}
+
+function renderTrendChart(){
+  const wrap = document.getElementById('trendChartWrap');
+  const shown = DATA.teams.filter(t => trendVisible.has(t.id));
+  wrap.innerHTML = shown.length
+    ? trendChartSVG(shown)
+    : `<div style="margin:auto; color:var(--text-faint); font-size:13px;">Select a team from the legend to plot it.</div>`;
+}
+
+function tierColor(tier){
+  return {Elite:'#D6303B', Strong:'#E8792E', Solid:'#E8B93B', Watch:'#1E9B7E'}[tier] || '#5C6B7A';
+}
+
+let targetSort = {key:'rate', dir:'desc'};
+let targetFilters = {type:'ALL', team:'ALL', pos:'ALL'};
+
+const CONF_ORDER = {High:3, Medium:2, Low:1};
+
+function renderTargets(){
+  const tbody = document.getElementById('targetsBody');
+  const q = (document.getElementById('playerSearch').value || '').toLowerCase();
+  const tierFilter = document.getElementById('tierFilter').value;
+  const teamById = Object.fromEntries(DATA.teams.map(t => [t.id, t]));
+
+  let rows = DATA.players.map(p => ({...p, teamObj: teamById[p.team]}));
+  if(tierFilter === 'Strong') rows = rows.filter(p => p.tier === 'Elite' || p.tier === 'Strong');
+  if(tierFilter === 'Elite') rows = rows.filter(p => p.tier === 'Elite');
+  if(q) rows = rows.filter(p => p.name.toLowerCase().includes(q) || (p.teamObj?.name || '').toLowerCase().includes(q));
+  if(targetFilters.type !== 'ALL') rows = rows.filter(p => p.type === targetFilters.type);
+  if(targetFilters.team !== 'ALL') rows = rows.filter(p => String(p.team) === targetFilters.team);
+  if(targetFilters.pos !== 'ALL') rows = rows.filter(p => p.pos.split('/').includes(targetFilters.pos));
+
+  const dirMult = targetSort.dir === 'asc' ? 1 : -1;
+  rows.sort((a,b) => {
+    let av, bv;
+    switch(targetSort.key){
+      case 'name': av=a.name; bv=b.name; break;
+      case 'team': av=a.teamObj?.abbr||''; bv=b.teamObj?.abbr||''; break;
+      case 'pos':  av=a.pos; bv=b.pos; break;
+      case 'role': av=a.role; bv=b.role; break;
+      case 'tier': av=a.tier; bv=b.tier; break;
+      case 'confidence': av=CONF_ORDER[a.confidence]||0; bv=CONF_ORDER[b.confidence]||0; break;
+      default:     av=a.rate; bv=b.rate;
+    }
+    if(typeof av === 'string') return av.localeCompare(bv) * dirMult;
+    return (av - bv) * dirMult;
+  });
+
+  tbody.innerHTML = rows.map(p => {
+    const t = p.teamObj;
+    const isIL = p.role === 'IL';
+    const trend = trendArrow(p.trend);
+    const confN = CONF_ORDER[p.confidence] || 0;
+    const confDots = [1,2,3].map(i => `<span class="${i<=confN?'on':''}"></span>`).join('');
+    const bullpen = p.bullpenFlag
+      ? `<span class="bullpen-flag ${p.bullpenFlag.toLowerCase()}" title="${p.bullpenReason}">${p.bullpenFlag}</span>`
+      : '';
+    return `
+      <tr>
+        <td class="mono"><b>${p.rate.toFixed(2)}</b> <span style="color:var(--text-faint); font-size:11.5px;">pts/${p.unit}</span></td>
+        <td>
+          <span class="trend-arrow ${trend.dir}" title="${trend.delta >= 0 ? '+' : ''}${trend.delta.toFixed(2)} over last 3 days">
+            ${trend.symbol} <span class="mono">${trend.delta >= 0 ? '+' : ''}${trend.delta.toFixed(2)}</span>
+          </span>
+        </td>
+        <td>
+          <span style="font-weight:600;">${p.name}</span>
+          ${isIL ? `<span class="il-badge" title="${p.status || 'Unavailable'}">${p.status || 'IL'}</span>` : ''}
+          ${p.note ? `<div style="font-size:11px; color:#E8B93B; margin-top:2px;">⬤ ${p.note}</div>` : ''}
+        </td>
+        <td>
+          <div class="team-cell">
+            <div class="team-swatch" style="background:${t ? t.color : '#5C6B7A'}; height:20px;"></div>
+            <span class="mono">${t ? t.abbr : '—'}</span>
+          </div>
+        </td>
+        <td class="mono">${p.pos}</td>
+        <td>${p.role}${bullpen}</td>
+        <td><span class="tier-pill" style="background:${tierColor(p.tier)}">${p.tier}</span></td>
+        <td><span class="conf-dots" title="${p.confidence}: ${p.confidenceReason}">${confDots}</span></td>
+      </tr>`;
+  }).join('') || `<tr><td colspan="8" style="text-align:center; color:var(--text-faint); padding:20px;">No players match that search.</td></tr>`;
+
+  document.querySelectorAll('#targetsTable th.sortable').forEach(th => {
+    th.classList.toggle('sort-active', th.dataset.sort === targetSort.key);
+  });
+}
+
+function renderMovers(){
+  const wrap = document.getElementById('moversRow');
+  const withTrend = DATA.players.map(p => ({...p, t: trendArrow(p.trend)}));
+  const gainers = [...withTrend].sort((a,b) => b.t.delta - a.t.delta).slice(0,3);
+  const losers = [...withTrend].sort((a,b) => a.t.delta - b.t.delta).slice(0,3);
+
+  const pill = (p, dir) => `
+    <span class="mover-pill ${dir}" data-name="${p.name}" title="${p.t.delta>=0?'+':''}${p.t.delta.toFixed(2)} pts/${p.unit} over 3 days">
+      ${dir==='up'?'▲':'▼'} ${p.name} <span class="mono">${p.t.delta>=0?'+':''}${p.t.delta.toFixed(2)}</span>
+    </span>`;
+
+  wrap.innerHTML = gainers.map(p => pill(p,'up')).join('') + losers.map(p => pill(p,'down')).join('');
+  wrap.querySelectorAll('.mover-pill').forEach(el => {
+    el.addEventListener('click', () => {
+      document.getElementById('playerSearch').value = el.dataset.name;
+      renderTargets();
+    });
+  });
+}
+
+function populateTargetFilterOptions(){
+  const teamSelect = document.getElementById('teamFilterSelect');
+  const posSelect = document.getElementById('posFilterSelect');
+
+  const teamIds = [...new Set(DATA.players.map(p => p.team))];
+  const teamsUsed = DATA.teams.filter(t => teamIds.includes(t.id)).sort((a,b) => a.name.localeCompare(b.name));
+  teamSelect.innerHTML = '<option value="ALL">All teams</option>' +
+    teamsUsed.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+
+  const posSet = new Set();
+  DATA.players.forEach(p => p.pos.split('/').forEach(x => posSet.add(x)));
+  const posOrder = ['C','1B','2B','3B','SS','OF','UT','SP','RP'];
+  const posList = [...posSet].sort((a,b) => posOrder.indexOf(a) - posOrder.indexOf(b));
+  posSelect.innerHTML = '<option value="ALL">All positions</option>' +
+    posList.map(p => `<option value="${p}">${p}</option>`).join('');
+}
+
+function wireControls(){
+  document.querySelectorAll('#leagueFilter .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#leagueFilter .chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      leagueFilterState = chip.dataset.league;
+      renderBoard();
+    });
+  });
+  document.getElementById('playerSearch').addEventListener('input', renderTargets);
+  document.getElementById('tierFilter').addEventListener('change', renderTargets);
+  document.getElementById('teamFilterSelect').addEventListener('change', (e) => {
+    targetFilters.team = e.target.value; renderTargets();
+  });
+  document.getElementById('posFilterSelect').addEventListener('change', (e) => {
+    targetFilters.pos = e.target.value; renderTargets();
+  });
+  document.querySelectorAll('#typeFilter .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#typeFilter .chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      targetFilters.type = chip.dataset.type;
+      renderTargets();
+    });
+  });
+  document.querySelectorAll('#targetsTable th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      if(targetSort.key === th.dataset.sort){
+        targetSort.dir = targetSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        targetSort = {key: th.dataset.sort, dir: 'desc'};
+      }
+      renderTargets();
+    });
+  });
+
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+}
+
+function updateSampleFlag(){
+  const el = document.getElementById('sampleFlag');
+  if(DATA.isSample){
+    el.textContent = isFirebaseConfigured() ? 'Firestore connected but empty/unreachable — showing sample data' : 'Sample data — Firebase not configured yet';
+    el.style.color = '#E8B93B';
+    el.style.background = 'rgba(232,185,59,0.10)';
+    el.style.borderColor = 'rgba(232,185,59,0.28)';
+  } else {
+    el.textContent = 'Live data from Firestore';
+    el.style.color = '#3FD98A';
+    el.style.background = 'rgba(63,217,138,0.10)';
+    el.style.borderColor = 'rgba(63,217,138,0.28)';
+  }
+}
+
+async function init(){
+  DATA = await loadData();
+  renderUpdatedAt();
+  updateSampleFlag();
+  renderBoard();
+  renderRecentScores();
+  renderTrendLegend();
+  renderTrendChart();
+  populateTargetFilterOptions();
+  renderTargets();
+  renderMovers();
+  wireControls();
+}
+init();
+</script>
+</body>
+</html>

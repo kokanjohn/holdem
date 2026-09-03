@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Draft War Room — Stub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B0F14; --surface:#121922; --surface-2:#1A222D; --surface-hover:#212C39;
+    --border:#26313D; --border-soft:#1D2731;
+    --text:#E7EDF3; --text-dim:#8394A5; --text-faint:#5C6B7A;
+    --accent:#F2A93B;
+    --heat-elite:#D6303B; --heat-strong:#E8792E; --heat-solid:#E8B93B; --heat-watch:#1E9B7E;
+    --danger:#D6303B; --ok:#1E9B7E;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'Space Grotesk', system-ui, sans-serif; min-height:100vh;
+  }
+  .mono{font-family:'IBM Plex Mono', monospace; font-variant-numeric:tabular-nums;}
+  .shell{max-width:1900px; margin:0 auto; padding:28px 36px 80px;}
+
+  header.top{
+    display:flex; align-items:flex-start; justify-content:space-between; gap:20px; flex-wrap:wrap;
+    padding-bottom:20px; margin-bottom:22px; border-bottom:1px solid var(--border-soft);
+  }
+  .brand h1{font-size:26px; font-weight:700; margin:0 0 4px;}
+  .brand p{margin:0; color:var(--text-dim); font-size:14px; max-width:52ch;}
+
+  .conn-pill{
+    display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--border);
+    padding:7px 12px; border-radius:7px; font-size:13px; color:var(--text-dim);
+  }
+  .conn-dot{width:7px; height:7px; border-radius:50%; background:var(--text-faint); flex-shrink:0;}
+  .conn-pill strong{color:var(--text);}
+
+  .nav-link{
+    display:inline-flex; align-items:center; gap:7px;
+    background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim);
+    padding:8px 14px; border-radius:8px; font-size:13px; text-decoration:none;
+    transition:background .15s, color .15s; white-space:nowrap;
+  }
+  .nav-link:hover{background:var(--surface-hover); color:var(--text);}
+  .status-row{display:flex; align-items:center; gap:10px;}
+
+  .stub-banner{
+    background:rgba(242,169,59,0.08); border:1px solid rgba(242,169,59,0.28);
+    border-radius:9px; padding:14px 16px; margin-bottom:26px; font-size:13.5px; color:var(--text-dim);
+    display:flex; gap:12px; align-items:flex-start;
+  }
+  .stub-banner .tag{
+    background:rgba(242,169,59,0.18); color:var(--accent); font-size:11.5px; font-weight:600;
+    padding:2px 8px; border-radius:5px; flex-shrink:0; margin-top:1px;
+  }
+
+  section{margin-bottom:28px;}
+  .section-head{display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:12px;}
+  .section-head h2{font-size:17px; font-weight:600; margin:0;}
+  .section-head .sub{font-size:12.5px; color:var(--text-dim); margin-top:2px;}
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px;}
+
+  /* roadmap panel */
+  .roadmap-grid{display:grid; grid-template-columns:1.3fr 1fr; gap:16px;}
+  .roadmap-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px;}
+  .roadmap-list li{
+    display:flex; gap:10px; font-size:13.5px; color:var(--text-dim); align-items:flex-start;
+  }
+  .roadmap-list .step-num{
+    width:20px; height:20px; border-radius:5px; background:var(--surface-2); border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--text-faint);
+    flex-shrink:0; font-family:'IBM Plex Mono', monospace;
+  }
+  .connect-btn{
+    width:100%; padding:11px; border-radius:8px; border:1px dashed var(--border);
+    background:var(--surface-2); color:var(--text-faint); font-size:13.5px; font-family:inherit;
+    cursor:not-allowed; display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .fallback-note{font-size:12.5px; color:var(--text-faint); margin-top:10px; line-height:1.5;}
+
+  /* main draft layout */
+  .draft-layout{display:grid; grid-template-columns:1fr 320px; gap:18px;}
+
+  .pick-counter{
+    display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text-dim);
+  }
+  .pick-counter .num{color:var(--accent); font-weight:600;}
+  .undo-btn{
+    background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim);
+    font-size:12.5px; padding:6px 11px; border-radius:6px; cursor:pointer; font-family:inherit;
+  }
+  .undo-btn:hover{background:var(--surface-hover); color:var(--text);}
+
+  .search-input{
+    width:100%; max-width:280px; background:var(--surface-2); border:1px solid var(--border); color:var(--text);
+    padding:9px 12px; border-radius:7px; font-size:13.5px; font-family:inherit; outline:none;
+  }
+  .search-input:focus{border-color:rgba(242,169,59,0.5);}
+
+  table.pool{width:100%; border-collapse:collapse; font-size:13.5px;}
+  table.pool thead th{
+    text-align:left; font-weight:500; color:var(--text-faint); font-size:11.5px;
+    padding:0 10px 9px; border-bottom:1px solid var(--border-soft);
+  }
+  table.pool tbody tr{border-bottom:1px solid var(--border-soft);}
+  table.pool tbody tr:hover{background:var(--surface-hover);}
+  table.pool td{padding:9px 10px; vertical-align:middle;}
+  .tier-dot{width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:7px;}
+  .draft-actions{display:flex; gap:6px;}
+  .btn{
+    font-family:inherit; font-size:12px; padding:6px 10px; border-radius:6px; cursor:pointer; border:1px solid transparent;
+  }
+  .btn-mine{background:rgba(30,155,126,0.15); color:#3FD9AA; border-color:rgba(30,155,126,0.35);}
+  .btn-mine:hover{background:rgba(30,155,126,0.25);}
+  .btn-off{background:var(--surface-2); color:var(--text-dim); border-color:var(--border);}
+  .btn-off:hover{background:var(--surface-hover); color:var(--text);}
+
+  .drafted-tag{font-size:11.5px; padding:3px 8px; border-radius:5px;}
+  .drafted-tag.mine{background:rgba(30,155,126,0.15); color:#3FD9AA;}
+  .drafted-tag.off{background:var(--surface-2); color:var(--text-faint);}
+
+  /* roster sidebar */
+  .roster-slot{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:9px 10px; border-radius:7px; margin-bottom:6px; font-size:13px;
+    background:var(--surface-2); border:1px solid var(--border-soft);
+  }
+  .roster-slot.filled{border-color:rgba(30,155,126,0.3);}
+  .roster-slot .slot-label{color:var(--text-faint); font-size:11.5px; width:34px; flex-shrink:0;}
+  .roster-slot .slot-player{flex:1; margin-left:8px;}
+  .roster-slot.filled .slot-player{color:var(--text); font-weight:500;}
+  .roster-slot:not(.filled) .slot-player{color:var(--text-faint);}
+
+  footer.foot{margin-top:34px; padding-top:16px; border-top:1px solid var(--border-soft); color:var(--text-faint); font-size:12px;}
+
+  @media (max-width:820px){ .draft-layout, .roadmap-grid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="top">
+    <div class="brand">
+      <h1>Draft War Room</h1>
+      <p>Live pick tracking for your Holdem draft. Stub build — manual tracking works now, live NFBC connection is planned (see below).</p>
+    </div>
+    <div class="status-row">
+      <a class="nav-link" href="dashboard.html">← Dashboard</a>
+      <div class="conn-pill">
+        <span class="conn-dot"></span>
+        <span>Not connected to NFBC — <strong>manual mode</strong></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="stub-banner">
+    <span class="tag">Stub</span>
+    <span>This page is an early skeleton, built now so the plan is captured. Visual design and most functionality will be revisited later — right now it proves out the manual "Drafted" workflow and the roster-slot tracker while the live-draft connection is investigated.</span>
+  </div>
+
+  <!-- ============ ROADMAP ============ -->
+  <section>
+    <div class="section-head">
+      <div>
+        <h2>Live draft connection — roadmap</h2>
+        <div class="sub">Not built yet. Requires an NFBC account to inspect what the live draft room actually exposes.</div>
+      </div>
+    </div>
+    <div class="panel roadmap-grid">
+      <ol class="roadmap-list">
+        <li><span class="step-num">1</span><span>Sign up for an NFBC account and enter a live/mock draft to inspect the page — need to know if it's a WebSocket feed, polling, or server-rendered, before anything can be built.</span></li>
+        <li><span class="step-num">2</span><span>If a usable feed exists: build a Cloudflare Worker to relay it — a Worker avoids browser CORS/auth issues that would block calling NFBC directly from this page, and gives us a stable endpoint to poll from here.</span></li>
+        <li><span class="step-num">3</span><span>Normalize whatever NFBC sends into the same player/team shape this dashboard already uses, so the rest of the UI doesn't need to change.</span></li>
+        <li><span class="step-num">4</span><span>Wire the Worker's endpoint into this page, with the manual "Drafted" button kept permanently as a fallback — NFBC's page structure could change or the feed could be rate-limited mid-draft.</span></li>
+      </ol>
+      <div>
+        <button class="connect-btn" disabled>
+          <span>⛓</span> Connect to NFBC — not yet available
+        </button>
+        <div class="fallback-note">
+          Until then, everything below runs on the manual "Drafted" button — click it as picks happen (yours or opponents') to keep the pool and your roster accurate in real time.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DRAFT BOARD ============ -->
+  <section>
+    <div class="section-head">
+      <div>
+        <h2>Available players</h2>
+        <div class="sub">Click "Mine" or "Off board" as picks happen to keep this in sync with the real draft.</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+        <div class="pick-counter">Pick <span class="num mono" id="pickNum">1</span> <button class="undo-btn" id="undoBtn">Undo last pick</button></div>
+        <input type="text" class="search-input" id="poolSearch" placeholder="Search available players…">
+      </div>
+    </div>
+
+    <div class="draft-layout">
+      <div class="panel">
+        <table class="pool">
+          <thead>
+            <tr><th>Player</th><th>Pos</th><th>Team</th><th>Tier</th><th style="text-align:right">Action</th></tr>
+          </thead>
+          <tbody id="poolBody"></tbody>
+        </table>
+      </div>
+
+      <!-- ============ MY ROSTER ============ -->
+      <div class="panel">
+        <div style="font-size:14px; font-weight:600; margin-bottom:12px;">My roster</div>
+        <div id="rosterSlots"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DRAFTED LOG ============ -->
+  <section>
+    <div class="section-head">
+      <div><h2>Draft log</h2><div class="sub">Most recent picks first.</div></div>
+    </div>
+    <div class="panel" id="draftLog" style="font-size:13px; color:var(--text-dim);">No picks yet.</div>
+  </section>
+
+  <footer class="foot">Draft War Room · v0.1 stub · in-memory only, nothing persists on reload yet</footer>
+</div>
+
+<script>
+/* =====================================================================
+   Roster shape per NFBC Postseason Holdem rules
+   ===================================================================== */
+const ROSTER_SLOTS = [
+  {label:'C',  eligible:['C']},
+  {label:'1B', eligible:['1B']},
+  {label:'2B', eligible:['2B']},
+  {label:'SS', eligible:['SS']},
+  {label:'3B', eligible:['3B']},
+  {label:'OF', eligible:['OF']},
+  {label:'OF', eligible:['OF']},
+  {label:'OF', eligible:['OF']},
+  {label:'OF', eligible:['OF']},
+  {label:'UT', eligible:['C','1B','2B','3B','SS','OF','DH']},
+  {label:'P',  eligible:['SP','RP']},
+  {label:'P',  eligible:['SP','RP']},
+  {label:'P',  eligible:['SP','RP']},
+  {label:'P',  eligible:['SP','RP']},
+  {label:'P',  eligible:['SP','RP']},
+  {label:'P',  eligible:['SP','RP']},
+];
+
+/* Reuse the same pool shape the dashboard uses (team/pos/tier), trimmed sample set. */
+let POOL = [
+  {name:'Shohei Ohtani', pos:'UT', team:'LAD', tier:'Elite'},
+  {name:'Mookie Betts',  pos:'OF', team:'LAD', tier:'Elite'},
+  {name:'Aaron Judge',   pos:'OF', team:'NYY', tier:'Elite'},
+  {name:'Juan Soto',     pos:'OF', team:'NYY', tier:'Elite'},
+  {name:'Gerrit Cole',   pos:'SP', team:'NYY', tier:'Strong'},
+  {name:'Bryce Harper',  pos:'1B', team:'PHI', tier:'Elite'},
+  {name:'Zack Wheeler',  pos:'SP', team:'PHI', tier:'Elite'},
+  {name:'Trea Turner',   pos:'SS', team:'PHI', tier:'Strong'},
+  {name:'Yordan Alvarez',pos:'OF', team:'HOU', tier:'Elite'},
+  {name:'Framber Valdez',pos:'SP', team:'HOU', tier:'Strong'},
+  {name:'Josh Hader',    pos:'RP', team:'HOU', tier:'Strong'},
+  {name:'Gunnar Henderson',pos:'SS',team:'BAL', tier:'Elite'},
+  {name:'Adley Rutschman',pos:'C', team:'BAL', tier:'Strong'},
+  {name:'Jackson Chourio',pos:'OF',team:'MIL', tier:'Strong'},
+  {name:'Freddy Peralta',pos:'SP', team:'MIL', tier:'Strong'},
+];
+
+let myRoster = ROSTER_SLOTS.map(s => ({...s, player:null}));
+let draftLog = [];
+let pickNum = 1;
+
+const TIER_COLOR = {Elite:'#D6303B', Strong:'#E8792E', Solid:'#E8B93B', Watch:'#1E9B7E'};
+
+function findOpenSlot(pos){
+  // simple: first empty slot this position is eligible for, preferring the
+  // specific slot over UT so UT stays flexible as long as possible
+  const specific = myRoster.find(s => !s.player && s.eligible.includes(pos) && s.label !== 'UT');
+  if(specific) return specific;
+  return myRoster.find(s => !s.player && s.eligible.includes(pos));
+}
+
+function draftPlayer(player, destination){
+  POOL = POOL.filter(p => p !== player);
+  draftLog.unshift({player, destination, pick: pickNum});
+  if(destination === 'mine'){
+    const slot = findOpenSlot(player.pos);
+    if(slot){ slot.player = player; }
+    else { alert(`No open roster slot for ${player.pos} — roster may be full at that position.`); }
+  }
+  pickNum++;
+  renderAll();
+}
+
+function undoLastPick(){
+  if(draftLog.length === 0) return;
+  const last = draftLog.shift();
+  POOL.unshift(last.player);
+  if(last.destination === 'mine'){
+    const slot = myRoster.find(s => s.player === last.player);
+    if(slot) slot.player = null;
+  }
+  pickNum = Math.max(1, pickNum - 1);
+  renderAll();
+}
+
+function renderPool(){
+  const tbody = document.getElementById('poolBody');
+  const q = (document.getElementById('poolSearch').value || '').toLowerCase();
+  const rows = POOL.filter(p => !q || p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q));
+
+  tbody.innerHTML = rows.map(p => `
+    <tr>
+      <td>${p.name}</td>
+      <td class="mono">${p.pos}</td>
+      <td class="mono">${p.team}</td>
+      <td><span class="tier-dot" style="background:${TIER_COLOR[p.tier]}"></span>${p.tier}</td>
+      <td>
+        <div class="draft-actions" style="justify-content:flex-end;">
+          <button class="btn btn-mine" data-name="${p.name}" data-dest="mine">Mine</button>
+          <button class="btn btn-off" data-name="${p.name}" data-dest="off">Off board</button>
+        </div>
+      </td>
+    </tr>
+  `).join('') || `<tr><td colspan="5" style="text-align:center; color:var(--text-faint); padding:16px;">No players match.</td></tr>`;
+
+  tbody.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const player = POOL.find(p => p.name === btn.dataset.name);
+      if(player) draftPlayer(player, btn.dataset.dest);
+    });
+  });
+}
+
+function renderRoster(){
+  const el = document.getElementById('rosterSlots');
+  el.innerHTML = myRoster.map(s => `
+    <div class="roster-slot ${s.player ? 'filled' : ''}">
+      <span class="slot-label mono">${s.label}</span>
+      <span class="slot-player">${s.player ? s.player.name : 'Empty'}</span>
+    </div>
+  `).join('');
+}
+
+function renderLog(){
+  const el = document.getElementById('draftLog');
+  if(draftLog.length === 0){ el.textContent = 'No picks yet.'; return; }
+  el.innerHTML = draftLog.slice(0, 12).map(d => `
+    <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border-soft);">
+      <span><span class="mono" style="color:var(--text-faint)">#${d.pick}</span> &nbsp; ${d.player.name} <span style="color:var(--text-faint)">(${d.player.team} · ${d.player.pos})</span></span>
+      <span class="drafted-tag ${d.destination === 'mine' ? 'mine' : 'off'}">${d.destination === 'mine' ? 'My team' : 'Off board'}</span>
+    </div>
+  `).join('');
+}
+
+function renderAll(){
+  document.getElementById('pickNum').textContent = pickNum;
+  renderPool();
+  renderRoster();
+  renderLog();
+}
+
+document.getElementById('poolSearch').addEventListener('input', renderPool);
+document.getElementById('undoBtn').addEventListener('click', undoLastPick);
+
+renderAll();
+</script>
+</body>
+</html>
