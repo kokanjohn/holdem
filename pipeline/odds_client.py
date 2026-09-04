@@ -52,27 +52,54 @@ def get_mlb_futures(market="outrights"):
     'alternate' markets like league pennant winners — check
     GET {BASE}/sports/baseball_mlb/odds?... markets for what's currently live;
     availability varies book to book and by time of season.
+
+    NOTE: querying markets='outrights' on the main 'baseball_mlb' sport key
+    returned a 422 in testing. Best available guess (UNVERIFIED — I don't
+    have network access to confirm live): The Odds API likely treats season-
+    long futures as a separate sport key rather than a market on the regular
+    sport, following the pattern seen elsewhere in their catalog (e.g.
+    'americanfootball_nfl_super_bowl_winner'). This function now tries the
+    regular sport first, then falls back to a guessed futures-specific sport
+    key. If both fail, check https://api.the-odds-api.com/v4/sports/?apiKey=...
+    (with your real key) to see the exact list of valid sport keys — that's
+    the authoritative source, not this comment.
     """
     key = _get_key()
-    resp = requests.get(
-        f"{BASE}/sports/baseball_mlb/odds",
-        params={
-            "apiKey": key,
-            "regions": "us",
-            "markets": market,
-            "oddsFormat": "american",
-        },
-        timeout=20,
-    )
-    resp.raise_for_status()
-    data = resp.json()
+    attempts = [
+        ("baseball_mlb", market),
+        ("baseball_mlb_world_series_winner", "outrights"),
+    ]
+    last_error = None
+    for sport_key, market_key in attempts:
+        try:
+            resp = requests.get(
+                f"{BASE}/sports/{sport_key}/odds",
+                params={
+                    "apiKey": key,
+                    "regions": "us",
+                    "markets": market_key,
+                    "oddsFormat": "american",
+                },
+                timeout=20,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            break
+        except requests.RequestException as e:
+            last_error = e
+            data = None
+    if data is None:
+        raise OddsAPIError(
+            f"All sport-key attempts for MLB futures failed. Last error: {last_error}. "
+            f"Check {BASE}/sports/?apiKey=YOUR_KEY for the real list of valid sport keys."
+        )
 
     # Average implied probability across all books offering the market, then de-vig.
     team_odds = {}  # team_name -> list of raw implied probs across books
     for event in data:
         for bookmaker in event.get("bookmakers", []):
             for m in bookmaker.get("markets", []):
-                if m.get("key") != market:
+                if m.get("key") != market_key:
                     continue
                 for outcome in m.get("outcomes", []):
                     team = outcome["name"]
