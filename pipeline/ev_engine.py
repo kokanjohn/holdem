@@ -244,6 +244,9 @@ def run(season, push_firestore=False, contenders_only=False, statcast=True):
                         recent_form["recentPointsPerIP"] if recent_form else None, rate.get("pointsPerIP")
                     )
                     save_signal = player_model.pick_save_signal(recent_form, rate.get("savesPerTeamWin"))
+                    expected_pts_per_game = player_model.expected_points_per_team_game_pitcher(
+                        rate, role, recent_form, team_games_cache
+                    )
                 else:
                     rate = player_model.project_hitter_rate(
                         p["playerId"], season, league_pts_pa,
@@ -260,6 +263,9 @@ def run(season, push_firestore=False, contenders_only=False, statcast=True):
                         recent_form["recentPointsPerPA"] if recent_form else None, rate.get("pointsPerPA")
                     )
                     save_signal = None
+                    expected_pts_per_game = player_model.expected_points_per_team_game_hitter(
+                        rate, role, recent_form
+                    )
             except Exception as e:  # noqa: don't let one bad player stats call kill the run
                 print(f"    [skip] {p['name']}: {e}", file=sys.stderr)
                 continue
@@ -277,6 +283,7 @@ def run(season, push_firestore=False, contenders_only=False, statcast=True):
                 "available": availability["available"],
                 "statusNote": availability["status"],
                 "momentum": momentum,  # real recent-vs-projected delta — this is what should drive trend arrows
+                "expectedPtsPerTeamGame": expected_pts_per_game,  # THE comparable value metric across hitters/pitchers
                 **(recent_form or {}),
                 **rate, **role,
             }
@@ -302,7 +309,7 @@ def run(season, push_firestore=False, contenders_only=False, statcast=True):
         today = datetime.utcnow().strftime("%Y-%m-%d")
         history_records = [
             {"date": today, "playerId": r["playerId"], "player": r["player"],
-             "value": r.get("pointsPerPA", r.get("pointsPerIP")), "momentum": r.get("momentum")}
+             "value": r.get("expectedPtsPerTeamGame"), "momentum": r.get("momentum")}
             for r in player_records
         ]
         n = firestore_utils.batch_upsert(
