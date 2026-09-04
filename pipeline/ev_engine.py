@@ -201,6 +201,11 @@ def run(season, push_firestore=False, contenders_only=False, statcast=True):
         # crude filter: top half of teams by power rating, to cut runtime
         candidate_teams = ratings[: max(1, len(ratings) // 2)]
 
+    # Fetched ONCE for the whole run (it returns all 30 teams regardless of
+    # which one you look up) — was previously being re-pulled per pitcher,
+    # which was the single biggest source of wasted runtime.
+    team_pitching_totals_cache = mlb_data.get_team_pitching_totals(season)
+
     player_records = []
     for team in candidate_teams:
         team_id = team["teamId"]
@@ -211,6 +216,9 @@ def run(season, push_firestore=False, contenders_only=False, statcast=True):
         # clearly marked, instead of just disappearing or being projected as
         # if healthy.
         roster = mlb_data.get_team_roster(team_id, roster_type="40Man")
+        # Fetched once per team instead of once per hitter on that team.
+        team_games_cache = mlb_data.get_team_recent_game_count(team_id, season, last_n_days=30)
+
         for p in roster:
             pos = p["position"]
             is_pitcher = pos in ("P", "SP", "RP")
@@ -227,6 +235,7 @@ def run(season, push_firestore=False, contenders_only=False, statcast=True):
                     rate = player_model.project_pitcher_rate(
                         p["playerId"], team_id, season, league_pts_ip,
                         savant_row=savant_pitchers.get(p["playerId"]),
+                        team_pitching_totals=team_pitching_totals_cache,
                     )
                     role = player_model.classify_pitcher_role(p["playerId"], team_id, season, splits=splits)
                     eligible_positions, pos_detail = [role["role"]], {}
@@ -240,7 +249,9 @@ def run(season, push_firestore=False, contenders_only=False, statcast=True):
                         p["playerId"], season, league_pts_pa,
                         savant_row=savant_batters.get(p["playerId"]),
                     )
-                    role = player_model.classify_hitter_role(p["playerId"], team_id, season, splits=splits)
+                    role = player_model.classify_hitter_role(
+                        p["playerId"], team_id, season, splits=splits, team_games=team_games_cache
+                    )
                     eligible_positions, pos_detail = position_eligibility.compute_eligible_positions(
                         p["playerId"], season, roster_listed_position=pos
                     )
