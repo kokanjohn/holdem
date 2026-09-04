@@ -21,7 +21,7 @@ more concrete (and more useful) as each round's real matchups lock in.
 
 import argparse
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from . import mlb_data, odds_client, team_model, player_model, savant_data, firestore_utils, position_eligibility
 
@@ -108,6 +108,49 @@ def estimate_series(team_a_id, team_b_id, teams, runs, best_of, ratings_by_id):
     return result
 
 
+def compute_recent_scores(ratings, contender_limit=16):
+    """Yesterday's final scores for games involving a 'contending' team (top
+    N by current power rating), each annotated with how that team's market
+    WS odds moved since. Framed as correlation, not causation — a single
+    game result co-occurring with an odds move doesn't mean it CAUSED that
+    move (markets shift for lots of reasons), so the note describes what
+    happened, not why.
+
+    Compares today's odds (already in `ratings`, computed earlier this run)
+    against yesterday's `team_rating_history` snapshot for the same team —
+    fetched by direct document ID (date_teamId), not a query, specifically
+    to avoid needing a Firestore composite index for a query this simple."""
+    yesterday = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
+    games = mlb_data.get_completed_games_with_scores(yesterday)
+    if not games:
+        return []
+
+    contender_ids = {r["teamId"] for r in ratings[:contender_limit]}
+    today_ws_by_team = {r["teamId"]: r.get("marketWSOdds") for r in ratings}
+
+    db = firestore_utils.get_firestore_client()
+    records = []
+    for g in games:
+        if g["awayTeamId"] not in contender_ids and g["homeTeamId"] not in contender_ids:
+            continue
+        impact_parts = []
+        for team_id, team_name in [(g["awayTeamId"], g["awayTeamName"]), (g["homeTeamId"], g["homeTeamName"])]:
+            if team_id not in contender_ids:
+                continue
+            prior_doc = db.collection("team_rating_history").document(f"{yesterday}_{team_id}").get()
+            if not prior_doc.exists:
+                continue
+            prior_val = prior_doc.to_dict().get("marketWSOdds")
+            today_val = today_ws_by_team.get(team_id)
+            if prior_val is None or today_val is None:
+                continue
+            delta = today_val - prior_val
+            sign = "+" if delta >= 0 else ""
+            impact_parts.append(f"{team_name} WS odds {sign}{delta*100:.1f}pt since")
+        records.append({**g, "impact": "; ".join(impact_parts) if impact_parts else None})
+    return records
+
+
 def compute_bracket_round_probabilities(season):
     """Returns {teamId: {'currentRound': str|None, 'advanceCurrentRoundProb': float|None}}
     for every team currently alive in a real, scheduled series."""
@@ -142,6 +185,33 @@ def compute_bracket_round_probabilities(season):
             "marketGameProb": round(1 - result["marketGameProb"], 4) if result["marketGameProb"] is not None else None,
         }
     return team_round_probs, ratings_by_id, teams
+
+
+def assign_percentile_tiers(records, value_key="expectedPtsPerTeamGame"):
+    """Assigns each record a tier based on where its value falls in THIS
+    run's actual full pool -- not a fixed guess. Top 10% = Elite, next 20%
+    = Strong, next 30% = Solid, remaining 40% = Watch. Recomputed fresh
+    every run, so tiers track the real field instead of drifting against a
+    stale hardcoded number. Records with no usable value (e.g. an IL player
+    with no recent playing time to rate) get 'Watch' by default rather than
+    being dropped."""
+    valid = [r for r in records if r.get(value_key) is not None]
+    valid.sort(key=lambda r: r[value_key], reverse=True)
+    n = len(valid)
+    for i, r in enumerate(valid):
+        pct = i / n if n else 1.0  # 0.0 = best in the pool, approaching 1.0 = worst
+        if pct < 0.10:
+            r["tier"] = "Elite"
+        elif pct < 0.30:
+            r["tier"] = "Strong"
+        elif pct < 0.60:
+            r["tier"] = "Solid"
+        else:
+            r["tier"] = "Watch"
+    for r in records:
+        if r.get(value_key) is None:
+            r["tier"] = "Watch"
+    return records
 
 
 def run(season, push_firestore=False, contenders_only=False, statcast=True):
@@ -180,6 +250,19 @@ def run(season, push_firestore=False, contenders_only=False, statcast=True):
                 "team_round_probabilities", records, id_fn=lambda r: f"{season}_{r['teamId']}"
             )
             print(f"Pushed {n} team round probabilities to Firestore.", file=sys.stderr)
+
+        print("Checking yesterday's completed games for contending teams...", file=sys.stderr)
+        recent_score_records = compute_recent_scores(ratings)
+        if recent_score_records:
+            n = firestore_utils.batch_upsert(
+                "recent_scores", recent_score_records,
+                id_fn=lambda r: f"{r['date']}_{r['awayTeamId']}_{r['homeTeamId']}",
+            )
+            print(f"Pushed {n} recent-score records to Firestore.", file=sys.stderr)
+        else:
+            print("  No completed contender games found for yesterday (early season, "
+                  "no games that day, or no prior day's odds snapshot to compare against).",
+                  file=sys.stderr)
 
     # Player rate/role projections
     league_pts_pa = player_model.league_avg_points_per_pa(season)
@@ -295,6 +378,8 @@ def run(season, push_firestore=False, contenders_only=False, statcast=True):
                 record["advanceCurrentRoundProb"] = round_prob["advanceCurrentRoundProb"]
                 record["roundMultiplier"] = ROUND_INFO[round_prob["currentRound"]]["multiplier"]
             player_records.append(record)
+
+    assign_percentile_tiers(player_records)
 
     if push_firestore and player_records:
         n = firestore_utils.batch_upsert(
