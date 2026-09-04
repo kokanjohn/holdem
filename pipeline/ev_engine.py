@@ -119,6 +119,15 @@ def compute_bracket_round_probabilities(season):
     for series in bracket:
         round_info = ROUND_INFO[series["round"]]
         team_a, team_b = series["teamIds"]
+        # MLB's schedule endpoint can return placeholder entries for rounds
+        # that haven't been determined yet (e.g. "TBD"/wild-card-winner
+        # stand-ins) before the real bracket is set — these have team IDs
+        # that aren't in our real 30-team ratings dict. Skip rather than
+        # crash; a real matchup will replace the placeholder once it exists.
+        if team_a not in ratings_by_id or team_b not in ratings_by_id:
+            print(f"  [bracket] Skipping series with unresolved/placeholder team "
+                  f"(ids {team_a}, {team_b}) — likely a TBD slot pre-bracket.", file=sys.stderr)
+            continue
         result = estimate_series(team_a, team_b, teams, runs, round_info["bestOf"], ratings_by_id)
         team_round_probs[team_a] = {
             "currentRound": series["round"],
