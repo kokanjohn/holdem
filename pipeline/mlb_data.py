@@ -67,12 +67,12 @@ def get_team_runs_scored_allowed(season):
     })
 
     runs_scored = {}
-    for split in hitting.get("stats", [{}])[0].get("splits", []):
+    for split in (hitting.get("stats") or [{}])[0].get("splits", []):
         team_id = split["team"]["id"]
         runs_scored[team_id] = int(split["stat"].get("runs", 0))
 
     runs_allowed = {}
-    for split in pitching.get("stats", [{}])[0].get("splits", []):
+    for split in (pitching.get("stats") or [{}])[0].get("splits", []):
         team_id = split["team"]["id"]
         runs_allowed[team_id] = int(split["stat"].get("runs", 0))
 
@@ -92,7 +92,7 @@ def get_team_hitting_totals(season):
         "stats": "season", "group": "hitting", "season": season, "sportId": 1,
     })
     out = {}
-    for split in data.get("stats", [{}])[0].get("splits", []):
+    for split in (data.get("stats") or [{}])[0].get("splits", []):
         s = split["stat"]
         out[split["team"]["id"]] = {
             "plateAppearances": int(s.get("plateAppearances", 0)),
@@ -116,7 +116,7 @@ def get_team_pitching_totals(season):
         "stats": "season", "group": "pitching", "season": season, "sportId": 1,
     })
     out = {}
-    for split in data.get("stats", [{}])[0].get("splits", []):
+    for split in (data.get("stats") or [{}])[0].get("splits", []):
         s = split["stat"]
         out[split["team"]["id"]] = {
             "inningsPitched": ip_to_decimal_innings(s.get("inningsPitched", "0.0")),
@@ -204,7 +204,7 @@ def get_player_fielding_games_by_position(player_id, season):
         "stats": "season", "group": "fielding", "season": season,
     })
     out = {}
-    for split in data.get("stats", [{}])[0].get("splits", []):
+    for split in (data.get("stats") or [{}])[0].get("splits", []):
         pos = split.get("position", {}).get("abbreviation")
         games = int(split.get("stat", {}).get("games", 0))
         if not pos or games == 0:
@@ -234,7 +234,7 @@ def get_player_season_stats(player_id, season, group):
     data = get(f"/people/{player_id}/stats", params={
         "stats": "season", "group": group, "season": season,
     })
-    splits = data.get("stats", [{}])[0].get("splits", [])
+    splits = (data.get("stats") or [{}])[0].get("splits", [])
     return splits[0]["stat"] if splits else {}
 
 
@@ -265,7 +265,7 @@ def get_player_milb_season_stats_by_level(player_id, season, group):
             })
         except requests.RequestException:
             continue
-        splits = data.get("stats", [{}])[0].get("splits", [])
+        splits = (data.get("stats") or [{}])[0].get("splits", [])
         if splits:
             out[level_name] = splits[0]["stat"]
     return out
@@ -277,7 +277,7 @@ def _get_full_gamelog(player_id, season, group):
     data = get(f"/people/{player_id}/stats", params={
         "stats": "gameLog", "group": group, "season": season,
     })
-    return data.get("stats", [{}])[0].get("splits", [])
+    return (data.get("stats") or [{}])[0].get("splits", [])
 
 
 def get_player_recent_gamelog(player_id, season, group, last_n_days=30, splits=None):
