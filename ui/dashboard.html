@@ -390,7 +390,7 @@
             <table class="board" id="targetsTable">
               <thead>
                 <tr>
-                  <th data-sort="rate" class="sortable" title="Projected fantasy points per PA or IP">Value</th>
+                  <th data-sort="rate" class="sortable" title="Expected points per team game — rate x actual playing time, so hitters and pitchers are genuinely comparable. Hover a value for the raw per-PA/IP rate.">Value</th>
                   <th title="3-day movement in projected value">Trend</th>
                   <th data-sort="name" class="sortable">Player</th>
                   <th data-sort="team" class="sortable">Team</th>
@@ -421,14 +421,13 @@
    not by hiding this object. Leave the placeholder values as-is and the
    dashboard runs on sample data automatically.
    ===================================================================== */
-
 const firebaseConfig = {
-  apiKey: "AIzaSyAiEgiGJacbk43YadooEmy9QuoxmiYbNI0",
-  authDomain: "postseasonholdem.firebaseapp.com",
-  projectId: "postseasonholdem",
-  storageBucket: "postseasonholdem.firebasestorage.app",
-  messagingSenderId: "489408233384",
-  appId: "1:489408233384:web:cf4c0c7660fc2dbce4e79d"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID",
 };
 
 function isFirebaseConfigured(){
@@ -465,16 +464,17 @@ function teamMeta(teamId){ return MLB_TEAM_META[teamId] || {abbr:'???', color:'#
    reason — the dashboard should never show a blank screen.
    ===================================================================== */
 
-function tierFromRate(rate, unit){
+function tierFromRate(ptsPerGame){
   // NOTE: threshold-based placeholder, not a full-pool percentile rank.
   // A more rigorous version would compute percentile tiers in the pipeline
   // itself (across the whole projected slate) and store the tier directly
   // on the record — worth doing once there's a full slate to rank against.
-  if(rate == null) return 'Watch';
-  const cuts = unit === 'PA' ? [0.95, 0.80, 0.65] : [1.15, 0.95, 0.75];
-  if(rate >= cuts[0]) return 'Elite';
-  if(rate >= cuts[1]) return 'Strong';
-  if(rate >= cuts[2]) return 'Solid';
+  // Single scale now that both hitters and pitchers are normalized to
+  // expected points per team game — no more separate PA/IP cutoffs.
+  if(ptsPerGame == null) return 'Watch';
+  if(ptsPerGame >= 1.6) return 'Elite';
+  if(ptsPerGame >= 1.1) return 'Strong';
+  if(ptsPerGame >= 0.7) return 'Solid';
   return 'Watch';
 }
 
@@ -539,8 +539,15 @@ async function loadData(){
     playersSnap.forEach(doc => {
       const d = doc.data();
       const isHitter = d.pointsPerPA != null;
-      const rate = isHitter ? d.pointsPerPA : d.pointsPerIP;
-      const unit = isHitter ? 'PA' : 'IP';
+      const rawRate = isHitter ? d.pointsPerPA : d.pointsPerIP;
+      const rawUnit = isHitter ? 'PA' : 'IP';
+      // expectedPtsPerTeamGame is the comparable value across hitters AND
+      // pitchers (rate x actual playing-time share) — rawRate alone isn't
+      // comparable across the two (an inning pitched is worth far more on
+      // its own than a single plate appearance, structurally, regardless
+      // of player quality). Fall back to rawRate only for older Firestore
+      // docs written before this field existed.
+      const ptsPerGame = d.expectedPtsPerTeamGame != null ? d.expectedPtsPerTeamGame : (rawRate || 0);
       const hist = playerHistByPlayer[d.playerId] || [];
       const conf = deriveConfidence(d);
 
@@ -558,13 +565,14 @@ async function loadData(){
 
       players.push({
         team: d.teamId, name: d.player, pos: d.eligiblePositionsDisplay || d.rosterPosition,
-        role: d.role, rate: rate || 0, unit,
-        tier: tierFromRate(rate, unit),
+        role: d.role, rate: ptsPerGame, unit: 'game',
+        rawRate, rawUnit,
+        tier: tierFromRate(ptsPerGame),
         confidence: conf.c, confidenceReason: conf.r,
         status: d.statusNote, note,
         bullpenFlag, bullpenReason,
         type: isHitter ? 'hitter' : 'pitcher',
-        trend: hist.length >= 2 ? hist.map(h => h.value || 0) : [rate || 0, rate || 0],
+        trend: hist.length >= 2 ? hist.map(h => h.value || 0) : [ptsPerGame, ptsPerGame],
       });
     });
 
@@ -954,7 +962,7 @@ function renderTargets(){
       : '';
     return `
       <tr>
-        <td class="mono"><b>${p.rate.toFixed(2)}</b> <span style="color:var(--text-faint); font-size:11.5px;">pts/${p.unit}</span></td>
+        <td class="mono" title="${p.rawRate != null ? `Raw rate: ${p.rawRate.toFixed(2)} pts/${p.rawUnit} when on the field — Value = that rate x actual playing time` : ''}"><b>${p.rate.toFixed(2)}</b> <span style="color:var(--text-faint); font-size:11.5px;">pts/${p.unit}</span></td>
         <td>
           <span class="trend-arrow ${trend.dir}" title="${trend.delta >= 0 ? '+' : ''}${trend.delta.toFixed(2)} over last 3 days">
             ${trend.symbol} <span class="mono">${trend.delta >= 0 ? '+' : ''}${trend.delta.toFixed(2)}</span>
