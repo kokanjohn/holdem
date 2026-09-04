@@ -421,14 +421,23 @@
    not by hiding this object. Leave the placeholder values as-is and the
    dashboard runs on sample data automatically.
    ===================================================================== */
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyAiEgiGJacbk43YadooEmy9QuoxmiYbNI0",
+  authDomain: "postseasonholdem.firebaseapp.com",
+  projectId: "postseasonholdem",
+  storageBucket: "postseasonholdem.firebasestorage.app",
+  messagingSenderId: "489408233384",
+  appId: "1:489408233384:web:cf4c0c7660fc2dbce4e79d"
 };
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
 
 function isFirebaseConfigured(){
   return firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY";
