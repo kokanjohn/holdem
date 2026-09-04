@@ -470,3 +470,38 @@ def pick_save_signal(recent_form_pitcher, season_saves_per_team_win):
         "recentSaveConversionRate": recent_form_pitcher["recentSaveConversionRate"] if recent_form_pitcher else None,
         "seasonSavesPerTeamWin": season_saves_per_team_win,
     }
+
+
+# --- Expected points per team game -----------------------------------------
+# pointsPerPA and pointsPerIP are NOT comparable to each other — an inning
+# pitched is worth +1 point before ER/K even factor in, while a single PA is
+# worth nothing most of the time (often -0.25, an out). Comparing the raw
+# rates directly makes every reliever look better than every hitter, which
+# is a units bug, not a signal about who's actually more valuable.
+#
+# The fix: multiply each player's rate by how much of a TEAM GAME they
+# actually contribute — PA-per-game-played x share of games played for
+# hitters; IP-per-appearance x how often they actually appear for pitchers.
+# That puts an everyday hitter and a lockdown closer on the same footing.
+
+def expected_points_per_team_game_hitter(rate, role, recent_form):
+    """rate: output of project_hitter_rate(). role: output of
+    classify_hitter_role(). recent_form: output of compute_recent_form_hitter()."""
+    if not recent_form or not recent_form.get("recentGamesUsed"):
+        return 0.0
+    pa_per_game_played = recent_form["recentPA"] / recent_form["recentGamesUsed"]
+    share_of_games = role.get("shareOfGames", 0)
+    return round(rate.get("pointsPerPA", 0) * pa_per_game_played * share_of_games, 4)
+
+
+def expected_points_per_team_game_pitcher(rate, role, recent_form, team_games):
+    """rate: output of project_pitcher_rate(). role: output of
+    classify_pitcher_role(). recent_form: output of compute_recent_form_pitcher().
+    team_games: team's game count over the same trailing window role used
+    (get_team_recent_game_count) — needed to turn 'appearances' into a
+    share of team games, same idea as shareOfGames for hitters."""
+    if not recent_form or not recent_form.get("recentGamesUsed") or not team_games:
+        return 0.0
+    ip_per_appearance = recent_form["recentIP"] / recent_form["recentGamesUsed"]
+    appearance_share = min(1.0, role.get("recentAppearances", 0) / team_games)
+    return round(rate.get("pointsPerIP", 0) * ip_per_appearance * appearance_share, 4)
