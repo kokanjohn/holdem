@@ -390,7 +390,8 @@
             <table class="board" id="targetsTable">
               <thead>
                 <tr>
-                  <th data-sort="rate" class="sortable" title="Expected points per team game — rate x actual playing time, so hitters and pitchers are genuinely comparable. Hover a value for the raw per-PA/IP rate.">Value</th>
+                  <th data-sort="draftEV" class="sortable" title="Draft priority — this player's value x his team's chance of playing deep into October, weighted by the round multiplier. This is the 'who should I draft' number.">Draft EV</th>
+                  <th data-sort="rate" class="sortable" title="Expected points per team game — rate x actual playing time, so hitters and pitchers are genuinely comparable on their own, independent of team. Hover a value for the raw per-PA/IP rate.">Value</th>
                   <th title="3-day movement in projected value">Trend</th>
                   <th data-sort="name" class="sortable">Player</th>
                   <th data-sort="team" class="sortable">Team</th>
@@ -568,6 +569,7 @@ async function loadData(){
         team: d.teamId, name: d.player, pos: d.eligiblePositionsDisplay || d.rosterPosition,
         role: d.role, rate: ptsPerGame, unit: 'game',
         rawRate, rawUnit,
+        draftEV: d.draftEV != null ? d.draftEV : null,
         tier: d.tier || tierFromRate(ptsPerGame),  // prefer the pipeline's real percentile tier; fall back for older docs
         confidence: conf.c, confidenceReason: conf.r,
         status: d.statusNote, note,
@@ -688,6 +690,12 @@ function sampleData(){
   players.forEach(p => {
     p.type = p.unit === 'IP' ? 'pitcher' : 'hitter';
     p.trend = seedValueTrend(p.rate, 14, p.rate * 0.045);
+
+    // Illustrative only, mirroring the pipeline's compute_team_ev_multiplier
+    // shape: rate x team quality (scaled off marketWS as a rough stand-in).
+    const teamObj = teams.find(t => t.id === p.team);
+    const teamFactor = teamObj ? teamObj.marketWS / 0.06 : 1;
+    p.draftEV = Number((p.rate * teamFactor).toFixed(2));
 
     // Confidence: derived from the same signals the pipeline already
     // computes (MiLB-informed note, role stability) — not a new data source,
@@ -929,7 +937,7 @@ function tierColor(tier){
   return {Elite:'#D6303B', Strong:'#E8792E', Solid:'#E8B93B', Watch:'#1E9B7E'}[tier] || '#5C6B7A';
 }
 
-let targetSort = {key:'rate', dir:'desc'};
+let targetSort = {key:'draftEV', dir:'desc'};
 let targetFilters = {type:'ALL', team:'ALL', pos:'ALL'};
 
 const CONF_ORDER = {High:3, Medium:2, Low:1};
@@ -958,6 +966,7 @@ function renderTargets(){
       case 'role': av=a.role; bv=b.role; break;
       case 'tier': av=a.tier; bv=b.tier; break;
       case 'confidence': av=CONF_ORDER[a.confidence]||0; bv=CONF_ORDER[b.confidence]||0; break;
+      case 'draftEV': av=a.draftEV ?? -1; bv=b.draftEV ?? -1; break;
       default:     av=a.rate; bv=b.rate;
     }
     if(typeof av === 'string') return av.localeCompare(bv) * dirMult;
@@ -975,6 +984,9 @@ function renderTargets(){
       : '';
     return `
       <tr>
+        <td class="mono" title="Rate x team's chance of a deep playoff run, weighted by round multiplier — the full 'should I draft this player' number">
+          ${p.draftEV != null ? `<b>${p.draftEV.toFixed(2)}</b>` : `<span style="color:var(--text-faint);">—</span>`}
+        </td>
         <td class="mono" title="${p.rawRate != null ? `Raw rate: ${p.rawRate.toFixed(2)} pts/${p.rawUnit} when on the field — Value = that rate x actual playing time` : ''}"><b>${p.rate.toFixed(2)}</b> <span style="color:var(--text-faint); font-size:11.5px;">pts/${p.unit}</span></td>
         <td>
           <span class="trend-arrow ${trend.dir}" title="${trend.delta >= 0 ? '+' : ''}${trend.delta.toFixed(2)} over last 3 days">
@@ -997,7 +1009,7 @@ function renderTargets(){
         <td><span class="tier-pill" style="background:${tierColor(p.tier)}">${p.tier}</span></td>
         <td><span class="conf-dots" title="${p.confidence}: ${p.confidenceReason}">${confDots}</span></td>
       </tr>`;
-  }).join('') || `<tr><td colspan="8" style="text-align:center; color:var(--text-faint); padding:20px;">No players match that search.</td></tr>`;
+  }).join('') || `<tr><td colspan="9" style="text-align:center; color:var(--text-faint); padding:20px;">No players match that search.</td></tr>`;
 
   document.querySelectorAll('#targetsTable th.sortable').forEach(th => {
     th.classList.toggle('sort-active', th.dataset.sort === targetSort.key);
