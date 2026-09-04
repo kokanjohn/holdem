@@ -191,7 +191,7 @@
 
   .recent-scores-row{flex:0 0 auto; display:flex; gap:10px; overflow-x:auto; padding-bottom:14px;}
   .score-card{
-    flex:0 0 auto; min-width:172px; background:var(--surface); border:1px solid var(--border);
+    flex:0 0 190px; width:190px; background:var(--surface); border:1px solid var(--border);
     border-radius:8px; padding:9px 12px; cursor:help;
   }
   .score-card-date{font-size:10.5px; color:var(--text-faint); margin-bottom:3px;}
@@ -492,13 +492,14 @@ async function loadData(){
     return {...sampleData(), isSample: true};
   }
   try {
-    const [ratingsSnap, roundsSnap, playersSnap, ratingHistSnap, playerHistSnap, metaSnap] = await Promise.all([
+    const [ratingsSnap, roundsSnap, playersSnap, ratingHistSnap, playerHistSnap, metaSnap, scoresSnap] = await Promise.all([
       firestoreDb.collection('team_power_ratings').get(),
       firestoreDb.collection('team_round_probabilities').get(),
       firestoreDb.collection('player_projections').get(),
       firestoreDb.collection('team_rating_history').get(),
       firestoreDb.collection('player_projection_history').get(),
       firestoreDb.collection('system_meta').doc('last_run').get(),
+      firestoreDb.collection('recent_scores').get(),
     ]);
 
     if(ratingsSnap.empty){
@@ -567,7 +568,7 @@ async function loadData(){
         team: d.teamId, name: d.player, pos: d.eligiblePositionsDisplay || d.rosterPosition,
         role: d.role, rate: ptsPerGame, unit: 'game',
         rawRate, rawUnit,
-        tier: tierFromRate(ptsPerGame),
+        tier: d.tier || tierFromRate(ptsPerGame),  // prefer the pipeline's real percentile tier; fall back for older docs
         confidence: conf.c, confidenceReason: conf.r,
         status: d.statusNote, note,
         bullpenFlag, bullpenReason,
@@ -579,11 +580,23 @@ async function loadData(){
     const meta = metaSnap.exists ? metaSnap.data() : null;
     const generatedAt = (meta && meta.ranAt && meta.ranAt.toDate) ? meta.ranAt.toDate() : new Date();
 
-    // Not yet built into the pipeline — recent-scores requires correlating
-    // completed games (from the results scorer) with same-day odds
-    // movement, which is a separate aggregation step. Left empty rather
-    // than faked; the card row just won't render until that's built.
-    return {teams, players, recentScores: [], generatedAt, isSample: false};
+    // Only show the most recent date present, not every day ever stored —
+    // this is "yesterday's scores," not a full history browser.
+    const scoreDocs = [];
+    scoresSnap.forEach(doc => scoreDocs.push(doc.data()));
+    let recentScores = [];
+    if(scoreDocs.length){
+      const maxDate = scoreDocs.reduce((m, r) => (r.date > m ? r.date : m), scoreDocs[0].date);
+      recentScores = scoreDocs
+        .filter(r => r.date === maxDate)
+        .map(r => ({
+          away: teamMeta(r.awayTeamId).abbr, home: teamMeta(r.homeTeamId).abbr,
+          awayScore: r.awayScore, homeScore: r.homeScore, date: r.date,
+          impact: r.impact || 'No same-day odds movement on file for either team',
+        }));
+    }
+
+    return {teams, players, recentScores, generatedAt, isSample: false};
   } catch(err){
     console.error('Firestore read failed, falling back to sample data:', err);
     return {...sampleData(), isSample: true};
