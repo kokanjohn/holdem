@@ -26,10 +26,19 @@ from datetime import datetime, timedelta
 from . import mlb_data, odds_client, team_model, player_model, savant_data, firestore_utils, position_eligibility
 
 ROUND_INFO = {
-    "Division Series": {"order": 1, "bestOf": 5, "multiplier": 1},
-    "League Championship Series": {"order": 2, "bestOf": 7, "multiplier": 2},
-    "World Series": {"order": 3, "bestOf": 7, "multiplier": 3},
+    "Division Series": {"order": 1, "bestOf": 5, "multiplier": 1, "avgGames": 4.2},
+    "League Championship Series": {"order": 2, "bestOf": 7, "multiplier": 2, "avgGames": 5.2},
+    "World Series": {"order": 3, "bestOf": 7, "multiplier": 3, "avgGames": 5.2},
 }
+# avgGames: DS is a general best-of-5 estimate; LCS/WS ~5.2 is grounded in
+# actual World Series history (roughly 5.17 games average across its
+# best-of-7 era) and assumed to hold similarly for the LCS given the same
+# format. Used only for rounds that AREN'T currently real/scheduled (see
+# compute_team_ev_multiplier) -- once a round is real, its actual expected
+# length could be simulated precisely instead, but isn't yet; this constant
+# is the approximation in the meantime.
+
+ROUND_ORDER = ["Division Series", "League Championship Series", "World Series"]
 
 
 def _round_key_from_series_description(series_description):
@@ -149,6 +158,47 @@ def compute_recent_scores(ratings, contender_limit=16):
             impact_parts.append(f"{team_name} WS odds {sign}{delta*100:.1f}pt since")
         records.append({**g, "impact": "; ".join(impact_parts) if impact_parts else None})
     return records
+
+
+def compute_team_ev_multiplier(team_id, team_pythag, contender_avg_pythag, current_round_info=None, n_sims=2000):
+    """Returns 'points-per-unit-of-expectedPtsPerTeamGame' for a team across
+    the REMAINING tournament, from right now forward. Multiply any player's
+    expectedPtsPerTeamGame by this to get his full-tournament draft EV.
+
+    Uses REAL data for whichever round the team is currently, actually
+    playing (current_round_info, from team_round_probabilities) when
+    available. For any round beyond that -- which by definition has no real
+    matchup yet, since the pipeline never guesses a hypothetical bracket --
+    falls back to this team's own Pythagorean strength against the average
+    caliber of a playoff contender. That's a real, computed number, not a
+    guess pulled from thin air, but it's an approximation, not a real
+    matchup, and should be read as directional rather than precise. It gets
+    replaced by real data automatically, round by round, as the actual
+    bracket fills in over the postseason.
+
+    current_round_info=None means pre-bracket (nothing real exists yet for
+    ANY team) -- every round uses the hypothetical approximation. Compare
+    this against bracket_is_set at the call site to distinguish that from
+    'this specific team has been eliminated' (EV=0 going forward), which is
+    a different case this function doesn't handle on its own."""
+    current_round_name = current_round_info["currentRound"] if current_round_info else None
+    start_index = ROUND_ORDER.index(current_round_name) if current_round_name in ROUND_ORDER else 0
+
+    survive_prob = 1.0
+    ev_multiplier = 0.0
+    for i in range(start_index, len(ROUND_ORDER)):
+        round_name = ROUND_ORDER[i]
+        info = ROUND_INFO[round_name]
+        ev_multiplier += survive_prob * info["avgGames"] * info["multiplier"]
+
+        if round_name == current_round_name:
+            round_win_prob = current_round_info["advanceCurrentRoundProb"]
+        else:
+            hypothetical_game_prob = team_model.log5(team_pythag, contender_avg_pythag)
+            round_win_prob = team_model.simulate_series(hypothetical_game_prob, info["bestOf"], n_sims=n_sims)
+        survive_prob *= round_win_prob
+
+    return round(ev_multiplier, 4)
 
 
 def compute_bracket_round_probabilities(season):
@@ -289,6 +339,27 @@ def run(season, push_firestore=False, contenders_only=False, statcast=True):
     # which was the single biggest source of wasted runtime.
     team_pitching_totals_cache = mlb_data.get_team_pitching_totals(season)
 
+    # Draft EV setup: computed ONCE per team (not per player, since it only
+    # depends on team strength) and reused for every player on that roster.
+    contender_avg_pythag = (
+        sum(r["pythagoreanWinPct"] for r in ratings[:16]) / min(16, len(ratings)) if ratings else 0.5
+    )
+    bracket_is_set = bool(team_round_probs)
+    print(f"  Contender-average Pythagorean win% (hypothetical-round baseline): "
+          f"{contender_avg_pythag:.3f}", file=sys.stderr)
+    team_ev_multiplier_cache = {}
+    for r in ratings:
+        tid = r["teamId"]
+        if bracket_is_set and tid not in team_round_probs:
+            # Bracket is real and this team has no active-round entry -->
+            # eliminated (or, rarely, between rounds) -- no future value.
+            team_ev_multiplier_cache[tid] = 0.0
+        else:
+            team_ev_multiplier_cache[tid] = compute_team_ev_multiplier(
+                tid, r["pythagoreanWinPct"], contender_avg_pythag,
+                current_round_info=team_round_probs.get(tid),
+            )
+
     player_records = []
     for team in candidate_teams:
         team_id = team["teamId"]
@@ -367,6 +438,8 @@ def run(season, push_firestore=False, contenders_only=False, statcast=True):
                 "statusNote": availability["status"],
                 "momentum": momentum,  # real recent-vs-projected delta — this is what should drive trend arrows
                 "expectedPtsPerTeamGame": expected_pts_per_game,  # THE comparable value metric across hitters/pitchers
+                "draftEV": round(expected_pts_per_game * team_ev_multiplier_cache.get(team_id, 0.0), 4),
+                "teamEvMultiplier": team_ev_multiplier_cache.get(team_id, 0.0),
                 **(recent_form or {}),
                 **rate, **role,
             }
@@ -379,7 +452,10 @@ def run(season, push_firestore=False, contenders_only=False, statcast=True):
                 record["roundMultiplier"] = ROUND_INFO[round_prob["currentRound"]]["multiplier"]
             player_records.append(record)
 
-    assign_percentile_tiers(player_records)
+    # draftEV (not raw expectedPtsPerTeamGame) drives tiers now — tiers are
+    # meant to reflect overall draft priority, which should account for team
+    # survival odds, not just isolated player quality.
+    assign_percentile_tiers(player_records, value_key="draftEV")
 
     if push_firestore and player_records:
         n = firestore_utils.batch_upsert(
