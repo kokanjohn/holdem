@@ -214,6 +214,29 @@ def get_player_fielding_games_by_position(player_id, season):
     return out
 
 
+def get_completed_games_with_scores(date_str):
+    """Final scores for completed games on a date. The schedule endpoint
+    includes score data once a game reaches Final status, so this doesn't
+    need a separate boxscore call."""
+    data = get("/schedule", params={"sportId": 1, "date": date_str})
+    games = []
+    for d in data.get("dates", []):
+        for g in d.get("games", []):
+            if g["status"]["detailedState"] not in ("Final", "Game Over"):
+                continue
+            away, home = g["teams"]["away"], g["teams"]["home"]
+            if "score" not in away or "score" not in home:
+                continue
+            games.append({
+                "date": date_str,
+                "awayTeamId": away["team"]["id"], "awayTeamName": away["team"]["name"],
+                "awayScore": away["score"],
+                "homeTeamId": home["team"]["id"], "homeTeamName": home["team"]["name"],
+                "homeScore": home["score"],
+            })
+    return games
+
+
 def get_team_roster(team_id, roster_type="active"):
     """roster_type='active' returns only the current active (25/26-man) roster
     — players on the IL are excluded entirely, which silently hides them
