@@ -272,11 +272,16 @@ def project_hitter_rate(player_id, season, league_pts_per_pa, savant_row=None):
     return {"pointsPerPA": round(shrunk, 4), "PA": pa, "rawObservedRate": round(observed_rate, 4), **milb_info}
 
 
-def project_pitcher_rate(player_id, team_id, season, league_pts_per_inning, savant_row=None):
+def project_pitcher_rate(player_id, team_id, season, league_pts_per_inning, savant_row=None, team_pitching_totals=None):
     """Returns projected fantasy points per inning (IP/ER/K component only)
     plus win-share and save-share ratios used by the EV engine to project
     wins/saves from a team's projected win total in a round. Falls back to
-    a MiLB-informed prior for pitchers with a thin MLB innings sample."""
+    a MiLB-informed prior for pitchers with a thin MLB innings sample.
+
+    Pass `team_pitching_totals` (from mlb_data.get_team_pitching_totals(season),
+    fetched ONCE per run) to avoid re-pulling all 30 teams' stats on every
+    single pitcher — that was happening implicitly before and was a real
+    performance bug, not just a style nit."""
     stat = mlb_data.get_player_season_stats(player_id, season, "pitching")
     ip = mlb_data.ip_to_decimal_innings(stat.get("inningsPitched", "0.0")) if stat else 0.0
 
@@ -308,7 +313,9 @@ def project_pitcher_rate(player_id, team_id, season, league_pts_per_inning, sava
     saves = int(stat.get("saves", 0))
 
     # Wins-per-start regressed toward team win% — see module docstring for rationale.
-    team_pitching = mlb_data.get_team_pitching_totals(season).get(team_id, {})
+    if team_pitching_totals is None:
+        team_pitching_totals = mlb_data.get_team_pitching_totals(season)
+    team_pitching = team_pitching_totals.get(team_id, {})
     team_starts = team_pitching.get("gamesStarted", 1) or 1
     team_win_rate_prior = team_pitching.get("wins", 0) / team_starts if team_starts else 0.5
     observed_win_rate = wins / games_started if games_started else team_win_rate_prior
@@ -333,9 +340,13 @@ def project_pitcher_rate(player_id, team_id, season, league_pts_per_inning, sava
     }
 
 
-def classify_hitter_role(player_id, team_id, season, last_n_days=30, splits=None):
+def classify_hitter_role(player_id, team_id, season, last_n_days=30, splits=None, team_games=None):
+    """Pass `team_games` (from mlb_data.get_team_recent_game_count, fetched
+    ONCE per team) to avoid re-pulling the same team's schedule for every
+    hitter on the roster — same class of bug as team_pitching_totals above."""
     gamelog = mlb_data.get_player_recent_gamelog(player_id, season, "hitting", last_n_days, splits=splits)
-    team_games = mlb_data.get_team_recent_game_count(team_id, season, last_n_days)
+    if team_games is None:
+        team_games = mlb_data.get_team_recent_game_count(team_id, season, last_n_days)
     games_played = len(gamelog)
     share = games_played / team_games if team_games else 0.0
 
