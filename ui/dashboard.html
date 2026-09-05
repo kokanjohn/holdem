@@ -6,7 +6,7 @@
 <title>Holdem Control Room</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <style>
@@ -37,7 +37,7 @@
     font-family:'Space Grotesk', system-ui, sans-serif;
     -webkit-font-smoothing:antialiased;
   }
-  .mono{font-family:'IBM Plex Mono', 'SF Mono', Consolas, monospace; font-variant-numeric:tabular-nums;}
+  .mono{font-family:'Space Mono', 'SF Mono', Consolas, monospace; font-variant-numeric:tabular-nums;}
   a{color:inherit; text-decoration:none;}
   button{font-family:inherit;}
 
@@ -196,12 +196,17 @@
   }
   .score-card-date{font-size:10.5px; color:var(--text-faint); margin-bottom:5px;}
   .score-row{
-    font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--text-dim);
-    display:flex; align-items:baseline; gap:6px; padding:2px 0;
+    font-family:'Space Mono', monospace; font-size:13px;
+    display:flex; align-items:baseline; gap:5px; padding:2px 0;
   }
-  .score-row .won{font-weight:600;}
-  .score-row .contender{color:var(--accent);}
-  .score-row .contender::before{content:'★ '; font-size:9px;}
+  .score-row .star-slot{
+    display:inline-block; width:13px; flex-shrink:0; text-align:center;
+    color:var(--accent); font-size:10px;
+  }
+  .score-row .team-line{color:var(--text-dim); opacity:0.7;}
+  .score-row .team-line.contender{color:var(--accent);}
+  .score-row .team-line.won{font-weight:700; font-size:15px; opacity:1;}
+  .score-row .team-line.won:not(.contender){color:var(--text);}
   .odds-delta{display:inline-block; font-size:11px; font-weight:600; margin-left:2px;}
   .odds-delta.up{color:#3FD98A;}
   .odds-delta.down{color:#E2495A;}
@@ -813,13 +818,13 @@ function trendChartSVG(teams){
     const v = (maxVal/yTicks)*i;
     const yy = y(v);
     gridLines += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="#1D2731" stroke-width="1"/>`;
-    gridLines += `<text x="${padL-8}" y="${(yy+4).toFixed(1)}" text-anchor="end" fill="#5C6B7A" font-size="11" font-family="IBM Plex Mono, monospace">${(v*100).toFixed(0)}%</text>`;
+    gridLines += `<text x="${padL-8}" y="${(yy+4).toFixed(1)}" text-anchor="end" fill="#5C6B7A" font-size="11" font-family="Space Mono, monospace">${(v*100).toFixed(0)}%</text>`;
   }
 
   let xLabels = '';
   [0, 6, 13].forEach(i => {
     const label = i === 13 ? 'Today' : `D-${13-i}`;
-    xLabels += `<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" fill="#5C6B7A" font-size="11" font-family="IBM Plex Mono, monospace">${label}</text>`;
+    xLabels += `<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" fill="#5C6B7A" font-size="11" font-family="Space Mono, monospace">${label}</text>`;
   });
 
   let lines = '';
@@ -913,13 +918,19 @@ function renderRecentScores(){
   if(!DATA.recentScores || DATA.recentScores.length === 0){ wrap.innerHTML = ''; return; }
   wrap.innerHTML = DATA.recentScores.map(g => {
     const awayWon = g.awayScore > g.homeScore;
-    const awayClasses = [awayWon ? 'won' : '', g.awayIsContender ? 'contender' : ''].filter(Boolean).join(' ');
-    const homeClasses = [!awayWon ? 'won' : '', g.homeIsContender ? 'contender' : ''].filter(Boolean).join(' ');
+    const awayLineClasses = ['team-line', awayWon ? 'won' : '', g.awayIsContender ? 'contender' : ''].filter(Boolean).join(' ');
+    const homeLineClasses = ['team-line', !awayWon ? 'won' : '', g.homeIsContender ? 'contender' : ''].filter(Boolean).join(' ');
     return `
       <div class="score-card">
         <div class="score-card-date">${g.date}</div>
-        <div class="score-row"><span class="${awayClasses}">${g.away} ${g.awayScore}</span>${oddsDeltaBadge(g.awayOddsDeltaPts)}</div>
-        <div class="score-row"><span class="${homeClasses}">${g.home} ${g.homeScore}</span>${oddsDeltaBadge(g.homeOddsDeltaPts)}</div>
+        <div class="score-row">
+          <span class="star-slot">${g.awayIsContender ? '★' : ''}</span>
+          <span class="${awayLineClasses}">${g.away} ${g.awayScore}</span>${oddsDeltaBadge(g.awayOddsDeltaPts)}
+        </div>
+        <div class="score-row">
+          <span class="star-slot">${g.homeIsContender ? '★' : ''}</span>
+          <span class="${homeLineClasses}">${g.home} ${g.homeScore}</span>${oddsDeltaBadge(g.homeOddsDeltaPts)}
+        </div>
       </div>`;
   }).join('');
 }
