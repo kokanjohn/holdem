@@ -120,10 +120,13 @@ def estimate_series(team_a_id, team_b_id, teams, runs, best_of, ratings_by_id):
 def compute_recent_scores(ratings, contender_limit=16):
     """Yesterday's final scores for games involving a 'contending' team (top
     N by current power rating), each annotated with how that team's market
-    WS odds moved since. Framed as correlation, not causation — a single
-    game result co-occurring with an odds move doesn't mean it CAUSED that
-    move (markets shift for lots of reasons), so the note describes what
-    happened, not why.
+    WS odds moved since — as a raw number (awayOddsDeltaPts/homeOddsDeltaPts),
+    not a pre-written sentence. Formatting/coloring that into something
+    visual is a presentation concern and belongs in the dashboard, not here.
+
+    Framed as correlation, not causation — a single game result co-occurring
+    with an odds move doesn't mean it CAUSED that move (markets shift for
+    lots of reasons).
 
     Compares today's odds (already in `ratings`, computed earlier this run)
     against yesterday's `team_rating_history` snapshot for the same team —
@@ -138,29 +141,29 @@ def compute_recent_scores(ratings, contender_limit=16):
     today_ws_by_team = {r["teamId"]: r.get("marketWSOdds") for r in ratings}
 
     db = firestore_utils.get_firestore_client()
+
+    def odds_delta_pts(team_id):
+        if team_id not in contender_ids:
+            return None
+        prior_doc = db.collection("team_rating_history").document(f"{yesterday}_{team_id}").get()
+        if not prior_doc.exists:
+            return None
+        prior_val = prior_doc.to_dict().get("marketWSOdds")
+        today_val = today_ws_by_team.get(team_id)
+        if prior_val is None or today_val is None:
+            return None
+        return round((today_val - prior_val) * 100, 2)
+
     records = []
     for g in games:
         if g["awayTeamId"] not in contender_ids and g["homeTeamId"] not in contender_ids:
             continue
-        impact_parts = []
-        for team_id, team_name in [(g["awayTeamId"], g["awayTeamName"]), (g["homeTeamId"], g["homeTeamName"])]:
-            if team_id not in contender_ids:
-                continue
-            prior_doc = db.collection("team_rating_history").document(f"{yesterday}_{team_id}").get()
-            if not prior_doc.exists:
-                continue
-            prior_val = prior_doc.to_dict().get("marketWSOdds")
-            today_val = today_ws_by_team.get(team_id)
-            if prior_val is None or today_val is None:
-                continue
-            delta = today_val - prior_val
-            sign = "+" if delta >= 0 else ""
-            impact_parts.append(f"{team_name} WS odds {sign}{delta*100:.1f}pt since")
         records.append({
             **g,
-            "impact": "; ".join(impact_parts) if impact_parts else None,
             "awayIsContender": g["awayTeamId"] in contender_ids,
             "homeIsContender": g["homeTeamId"] in contender_ids,
+            "awayOddsDeltaPts": odds_delta_pts(g["awayTeamId"]),
+            "homeOddsDeltaPts": odds_delta_pts(g["homeTeamId"]),
         })
     return records
 
