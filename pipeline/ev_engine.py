@@ -156,7 +156,12 @@ def compute_recent_scores(ratings, contender_limit=16):
             delta = today_val - prior_val
             sign = "+" if delta >= 0 else ""
             impact_parts.append(f"{team_name} WS odds {sign}{delta*100:.1f}pt since")
-        records.append({**g, "impact": "; ".join(impact_parts) if impact_parts else None})
+        records.append({
+            **g,
+            "impact": "; ".join(impact_parts) if impact_parts else None,
+            "awayIsContender": g["awayTeamId"] in contender_ids,
+            "homeIsContender": g["homeTeamId"] in contender_ids,
+        })
     return records
 
 
