@@ -194,13 +194,18 @@
     flex:0 0 190px; width:190px; background:var(--surface); border:1px solid var(--border);
     border-radius:8px; padding:9px 12px;
   }
-  .score-card-date{font-size:10.5px; color:var(--text-faint); margin-bottom:3px;}
-  .score-card-line{font-family:'IBM Plex Mono', monospace; font-size:13.5px; color:var(--text-dim); display:flex; gap:6px; align-items:baseline; flex-wrap:wrap;}
-  .score-card-line .won{font-weight:700;}
-  .score-card-line .contender{color:var(--accent);}
-  .score-card-line .contender::before{content:'★ '; font-size:9px;}
-  .score-card-at{color:var(--text-faint); font-size:11px;}
-  .score-card-impact{font-size:10.5px; color:var(--text-faint); margin-top:5px; line-height:1.45; white-space:normal;}
+  .score-card-date{font-size:10.5px; color:var(--text-faint); margin-bottom:5px;}
+  .score-row{
+    font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--text-dim);
+    display:flex; align-items:baseline; gap:6px; padding:2px 0;
+  }
+  .score-row .won{font-weight:600;}
+  .score-row .contender{color:var(--accent);}
+  .score-row .contender::before{content:'★ '; font-size:9px;}
+  .odds-delta{display:inline-block; font-size:11px; font-weight:600; margin-left:2px;}
+  .odds-delta.up{color:#3FD98A;}
+  .odds-delta.down{color:#E2495A;}
+  .odds-delta.flat{color:var(--text-faint);}
   .il-badge{
     font-size:10.5px; font-weight:600; color:#F3F6FA; background:#8A2432;
     padding:2px 7px; border-radius:5px; margin-left:8px; white-space:nowrap;
@@ -597,7 +602,8 @@ async function loadData(){
           away: teamMeta(r.awayTeamId).abbr, home: teamMeta(r.homeTeamId).abbr,
           awayScore: r.awayScore, homeScore: r.homeScore, date: r.date,
           awayIsContender: !!r.awayIsContender, homeIsContender: !!r.homeIsContender,
-          impact: r.impact || 'No same-day odds movement on file for either team',
+          awayOddsDeltaPts: r.awayOddsDeltaPts != null ? r.awayOddsDeltaPts : null,
+          homeOddsDeltaPts: r.homeOddsDeltaPts != null ? r.homeOddsDeltaPts : null,
         }));
     }
 
@@ -654,15 +660,15 @@ function sampleData(){
   // to an odds move you'd see reflected in the trend/model above; it's not
   // separately computed here, just illustrating what that note would say.
   const recentScores = [
-    {away:'SD', home:'LAD', awayScore:2, homeScore:9, date:'Sep 2', awayIsContender:false, homeIsContender:true, impact:'NL West rivals — LAD +1.1pt WS odds since'},
-    {away:'BAL', home:'NYY', awayScore:6, homeScore:1, date:'Sep 2', awayIsContender:true, homeIsContender:true, impact:'AL East rivals — BAL +0.6pt, NYY flat'},
-    {away:'ATL', home:'PHI', awayScore:3, homeScore:8, date:'Sep 2', awayIsContender:false, homeIsContender:true, impact:'PHI model gap vs. market widened after this one — worth watching if that keeps up'},
-    {away:'CLE', home:'HOU', awayScore:4, homeScore:3, date:'Sep 2', awayIsContender:false, homeIsContender:true, impact:'HOU odds -0.4pt after a narrow loss'},
-    {away:'MIL', home:'NYM', awayScore:5, homeScore:2, date:'Sep 2', awayIsContender:true, homeIsContender:false, impact:'Wild card jockeying — MIL +0.3pt'},
-    {away:'SEA', home:'TEX', awayScore:1, homeScore:0, date:'Sep 2', awayIsContender:false, homeIsContender:true, impact:'TEX odds +0.2pt on a low-scoring win'},
-    {away:'DET', home:'MIN', awayScore:7, homeScore:6, date:'Sep 2', awayIsContender:true, homeIsContender:false, impact:'DET odds +0.5pt after a walk-off-adjacent slugfest'},
-    {away:'TB', home:'BOS', awayScore:3, homeScore:2, date:'Sep 2', awayIsContender:false, homeIsContender:true, impact:'BOS odds +0.2pt in a close divisional game'},
-    {away:'SF', home:'ARI', awayScore:2, homeScore:5, date:'Sep 2', awayIsContender:false, homeIsContender:true, impact:'ARI odds +0.3pt riding a home win'},
+    {away:'SD', home:'LAD', awayScore:2, homeScore:9, date:'Sep 2', awayIsContender:false, homeIsContender:true, awayOddsDeltaPts:null, homeOddsDeltaPts:1.1},
+    {away:'BAL', home:'NYY', awayScore:6, homeScore:1, date:'Sep 2', awayIsContender:true, homeIsContender:true, awayOddsDeltaPts:0.6, homeOddsDeltaPts:0.0},
+    {away:'ATL', home:'PHI', awayScore:3, homeScore:8, date:'Sep 2', awayIsContender:false, homeIsContender:true, awayOddsDeltaPts:null, homeOddsDeltaPts:0.9},
+    {away:'CLE', home:'HOU', awayScore:4, homeScore:3, date:'Sep 2', awayIsContender:false, homeIsContender:true, awayOddsDeltaPts:null, homeOddsDeltaPts:-0.4},
+    {away:'MIL', home:'NYM', awayScore:5, homeScore:2, date:'Sep 2', awayIsContender:true, homeIsContender:false, awayOddsDeltaPts:0.3, homeOddsDeltaPts:null},
+    {away:'SEA', home:'TEX', awayScore:1, homeScore:0, date:'Sep 2', awayIsContender:false, homeIsContender:true, awayOddsDeltaPts:null, homeOddsDeltaPts:0.2},
+    {away:'DET', home:'MIN', awayScore:7, homeScore:6, date:'Sep 2', awayIsContender:true, homeIsContender:false, awayOddsDeltaPts:0.5, homeOddsDeltaPts:null},
+    {away:'TB', home:'BOS', awayScore:3, homeScore:2, date:'Sep 2', awayIsContender:false, homeIsContender:true, awayOddsDeltaPts:null, homeOddsDeltaPts:0.2},
+    {away:'SF', home:'ARI', awayScore:2, homeScore:5, date:'Sep 2', awayIsContender:false, homeIsContender:true, awayOddsDeltaPts:null, homeOddsDeltaPts:0.3},
   ];
 
   const players = [
@@ -894,6 +900,14 @@ function renderBoard(){
   }).join('');
 }
 
+function oddsDeltaBadge(deltaPts){
+  if(deltaPts == null) return '';
+  const dir = deltaPts > 0.05 ? 'up' : (deltaPts < -0.05 ? 'down' : 'flat');
+  const symbol = dir === 'up' ? '▲' : (dir === 'down' ? '▼' : '–');
+  const label = dir === 'flat' ? '0.0pt' : `${deltaPts >= 0 ? '+' : ''}${deltaPts.toFixed(1)}pt`;
+  return `<span class="odds-delta ${dir}">${symbol} ${label}</span>`;
+}
+
 function renderRecentScores(){
   const wrap = document.getElementById('recentScores');
   if(!DATA.recentScores || DATA.recentScores.length === 0){ wrap.innerHTML = ''; return; }
@@ -904,12 +918,8 @@ function renderRecentScores(){
     return `
       <div class="score-card">
         <div class="score-card-date">${g.date}</div>
-        <div class="score-card-line">
-          <span class="${awayClasses}">${g.away} ${g.awayScore}</span>
-          <span class="score-card-at">@</span>
-          <span class="${homeClasses}">${g.home} ${g.homeScore}</span>
-        </div>
-        <div class="score-card-impact">${g.impact}</div>
+        <div class="score-row"><span class="${awayClasses}">${g.away} ${g.awayScore}</span>${oddsDeltaBadge(g.awayOddsDeltaPts)}</div>
+        <div class="score-row"><span class="${homeClasses}">${g.home} ${g.homeScore}</span>${oddsDeltaBadge(g.homeOddsDeltaPts)}</div>
       </div>`;
   }).join('');
 }
