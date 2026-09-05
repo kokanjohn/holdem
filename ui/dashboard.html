@@ -100,7 +100,7 @@
 
   .tab-content{flex:1 1 auto; min-height:0; position:relative;}
   .tab-panel{display:none; flex-direction:column; height:100%; min-height:0;}
-  .tab-panel.active{display:flex;}
+  .tab-panel.active{display:flex; overflow-y:auto;}
   section.pane{display:flex; flex-direction:column; height:100%; min-height:0; animation:riseIn .45s ease both;}
 
   .section-head{
@@ -121,7 +121,7 @@
   }
   .panel-caption em{color:var(--text-dim); font-style:normal; font-weight:600;}
 
-  .board-movement-layout{display:flex; gap:18px; flex:1; min-height:0;}
+  .board-movement-layout{display:flex; gap:18px; flex:1; min-height:420px;}
   .board-panel{flex:1.35; min-height:0;}
   .movement-panel{flex:1; min-height:0;}
   .panel-scroll{flex:1; min-height:0; overflow-y:auto;}
@@ -189,16 +189,18 @@
   .mm-badge.up{color:#3FD98A; background:rgba(63,217,138,0.1);}
   .mm-badge.down{color:#E2495A; background:rgba(226,73,90,0.1);}
 
-  .recent-scores-row{flex:0 0 auto; display:flex; gap:10px; overflow-x:auto; padding-bottom:14px;}
+  .recent-scores-row{flex:0 0 auto; display:flex; flex-wrap:wrap; gap:10px; padding-bottom:14px;}
   .score-card{
     flex:0 0 190px; width:190px; background:var(--surface); border:1px solid var(--border);
-    border-radius:8px; padding:9px 12px; cursor:help;
+    border-radius:8px; padding:9px 12px;
   }
   .score-card-date{font-size:10.5px; color:var(--text-faint); margin-bottom:3px;}
-  .score-card-line{font-family:'IBM Plex Mono', monospace; font-size:13.5px; color:var(--text-dim); display:flex; gap:6px; align-items:baseline;}
-  .score-card-line .won{color:var(--text); font-weight:600;}
+  .score-card-line{font-family:'IBM Plex Mono', monospace; font-size:13.5px; color:var(--text-dim); display:flex; gap:6px; align-items:baseline; flex-wrap:wrap;}
+  .score-card-line .won{font-weight:700;}
+  .score-card-line .contender{color:var(--accent);}
+  .score-card-line .contender::before{content:'★ '; font-size:9px;}
   .score-card-at{color:var(--text-faint); font-size:11px;}
-  .score-card-impact{font-size:10.5px; color:var(--text-faint); margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .score-card-impact{font-size:10.5px; color:var(--text-faint); margin-top:5px; line-height:1.45; white-space:normal;}
   .il-badge{
     font-size:10.5px; font-weight:600; color:#F3F6FA; background:#8A2432;
     padding:2px 7px; border-radius:5px; margin-left:8px; white-space:nowrap;
@@ -594,6 +596,7 @@ async function loadData(){
         .map(r => ({
           away: teamMeta(r.awayTeamId).abbr, home: teamMeta(r.homeTeamId).abbr,
           awayScore: r.awayScore, homeScore: r.homeScore, date: r.date,
+          awayIsContender: !!r.awayIsContender, homeIsContender: !!r.homeIsContender,
           impact: r.impact || 'No same-day odds movement on file for either team',
         }));
     }
@@ -651,11 +654,15 @@ function sampleData(){
   // to an odds move you'd see reflected in the trend/model above; it's not
   // separately computed here, just illustrating what that note would say.
   const recentScores = [
-    {away:'SD', home:'LAD', awayScore:2, homeScore:9, date:'Sep 2', impact:'NL West rivals — LAD +1.1pt WS odds since'},
-    {away:'BAL', home:'NYY', awayScore:6, homeScore:1, date:'Sep 2', impact:'AL East rivals — BAL +0.6pt, NYY flat'},
-    {away:'ATL', home:'PHI', awayScore:3, homeScore:8, date:'Sep 2', impact:'NL East rivals — PHI model gap vs. market widened'},
-    {away:'CLE', home:'HOU', awayScore:4, homeScore:3, date:'Sep 2', impact:'AL West/Central — HOU odds -0.4pt after narrow loss'},
-    {away:'MIL', home:'NYM', awayScore:5, homeScore:2, date:'Sep 2', impact:'Wild card jockeying — MIL +0.3pt'},
+    {away:'SD', home:'LAD', awayScore:2, homeScore:9, date:'Sep 2', awayIsContender:false, homeIsContender:true, impact:'NL West rivals — LAD +1.1pt WS odds since'},
+    {away:'BAL', home:'NYY', awayScore:6, homeScore:1, date:'Sep 2', awayIsContender:true, homeIsContender:true, impact:'AL East rivals — BAL +0.6pt, NYY flat'},
+    {away:'ATL', home:'PHI', awayScore:3, homeScore:8, date:'Sep 2', awayIsContender:false, homeIsContender:true, impact:'PHI model gap vs. market widened after this one — worth watching if that keeps up'},
+    {away:'CLE', home:'HOU', awayScore:4, homeScore:3, date:'Sep 2', awayIsContender:false, homeIsContender:true, impact:'HOU odds -0.4pt after a narrow loss'},
+    {away:'MIL', home:'NYM', awayScore:5, homeScore:2, date:'Sep 2', awayIsContender:true, homeIsContender:false, impact:'Wild card jockeying — MIL +0.3pt'},
+    {away:'SEA', home:'TEX', awayScore:1, homeScore:0, date:'Sep 2', awayIsContender:false, homeIsContender:true, impact:'TEX odds +0.2pt on a low-scoring win'},
+    {away:'DET', home:'MIN', awayScore:7, homeScore:6, date:'Sep 2', awayIsContender:true, homeIsContender:false, impact:'DET odds +0.5pt after a walk-off-adjacent slugfest'},
+    {away:'TB', home:'BOS', awayScore:3, homeScore:2, date:'Sep 2', awayIsContender:false, homeIsContender:true, impact:'BOS odds +0.2pt in a close divisional game'},
+    {away:'SF', home:'ARI', awayScore:2, homeScore:5, date:'Sep 2', awayIsContender:false, homeIsContender:true, impact:'ARI odds +0.3pt riding a home win'},
   ];
 
   const players = [
@@ -892,13 +899,15 @@ function renderRecentScores(){
   if(!DATA.recentScores || DATA.recentScores.length === 0){ wrap.innerHTML = ''; return; }
   wrap.innerHTML = DATA.recentScores.map(g => {
     const awayWon = g.awayScore > g.homeScore;
+    const awayClasses = [awayWon ? 'won' : '', g.awayIsContender ? 'contender' : ''].filter(Boolean).join(' ');
+    const homeClasses = [!awayWon ? 'won' : '', g.homeIsContender ? 'contender' : ''].filter(Boolean).join(' ');
     return `
-      <div class="score-card" title="${g.impact}">
+      <div class="score-card">
         <div class="score-card-date">${g.date}</div>
         <div class="score-card-line">
-          <span class="${awayWon ? 'won' : ''}">${g.away} ${g.awayScore}</span>
+          <span class="${awayClasses}">${g.away} ${g.awayScore}</span>
           <span class="score-card-at">@</span>
-          <span class="${!awayWon ? 'won' : ''}">${g.home} ${g.homeScore}</span>
+          <span class="${homeClasses}">${g.home} ${g.homeScore}</span>
         </div>
         <div class="score-card-impact">${g.impact}</div>
       </div>`;
