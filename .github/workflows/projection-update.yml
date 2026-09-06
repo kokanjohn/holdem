@@ -3,8 +3,10 @@ name: NFBC Holdem Projection Update
 on:
   schedule:
     # Once daily is plenty — team ratings and player roles don't shift hourly.
-    # 13:00 UTC = 9am ET.
-    - cron: '0 13 * * *'
+    # 13:07 UTC = ~9:07am ET. Deliberately NOT on the exact hour — GitHub's
+    # own docs warn that top-of-the-hour cron schedules queue behind
+    # everyone else's and can be delayed significantly.
+    - cron: '7 13 * * *'
   workflow_dispatch:
     inputs:
       season:
