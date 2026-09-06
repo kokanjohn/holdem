@@ -3,10 +3,11 @@ name: NFBC Holdem Daily Stat Pull
 on:
   schedule:
     # Postseason games typically finish late — pull "yesterday" twice to be safe:
-    # 09:00 UTC = 5am ET (catches games that ended the previous night)
-    - cron: '0 9 * * *'
-    # 15:00 UTC = 11am ET (safety net / catches anything delayed into early morning)
-    - cron: '0 15 * * *'
+    # 09:12 UTC = ~5am ET (catches games that ended the previous night)
+    - cron: '12 9 * * *'
+    # 15:18 UTC = ~11am ET (safety net / catches anything delayed into early morning)
+    # Both deliberately off the exact hour — see projection-update.yml for why.
+    - cron: '18 15 * * *'
   workflow_dispatch:
     inputs:
       date:
